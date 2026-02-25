@@ -1,0 +1,45 @@
+{
+    "name": "wordpress/ai-provider-for-openrouter",
+    "description": "AI Provider for OpenRouter for the PHP AI Client SDK. Works as both a Composer package and WordPress plugin.",
+    "license": "GPL-2.0-or-later",
+    "keywords": [
+        "ai",
+        "openrouter",
+        "wordpress",
+        "llm"
+    ],
+    "authors": [
+        {
+            "name": "WordPress AI Team",
+            "homepage": "https://make.wordpress.org/ai/"
+        }
+    ],
+    "homepage": "https://github.com/WordPress/ai-provider-for-openrouter",
+    "support": {
+        "issues": "https://github.com/WordPress/ai-provider-for-openrouter/issues",
+        "source": "https://github.com/WordPress/ai-provider-for-openrouter"
+    },
+    "require": {
+        "php": ">=7.4"
+    },
+    "require-dev": {
+        "wordpress/php-ai-client": "^0.4 || dev-trunk"
+    },
+    "suggest": {
+        "wordpress/php-ai-client": "Required. The core PHP AI Client SDK that this provider extends."
+    },
+    "minimum-stability": "dev",
+    "prefer-stable": true,
+    "autoload": {
+        "psr-4": {
+            "WordPress\\OpenRouterAiProvider\\": "src/"
+        }
+    },
+    "config": {
+        "optimize-autoloader": true,
+        "platform": {
+            "php": "7.4"
+        },
+        "sort-packages": true
+    }
+}
