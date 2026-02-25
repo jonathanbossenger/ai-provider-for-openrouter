@@ -1,5 +1,5 @@
 {
-    "name": "wordpress/ai-provider-for-openrouter",
+    "name": "jonathanbossenger/ai-provider-for-openrouter",
     "description": "AI Provider for OpenRouter for the PHP AI Client SDK. Works as both a Composer package and WordPress plugin.",
     "license": "GPL-2.0-or-later",
     "keywords": [
@@ -10,19 +10,24 @@
     ],
     "authors": [
         {
-            "name": "WordPress AI Team",
-            "homepage": "https://make.wordpress.org/ai/"
+            "name": "Jonathan Bossenger",
+            "homepage": "https://jonathanbossenger.com/"
         }
     ],
-    "homepage": "https://github.com/WordPress/ai-provider-for-openrouter",
+    "homepage": "https://github.com/jonathanbossenger/ai-provider-for-openrouter",
     "support": {
-        "issues": "https://github.com/WordPress/ai-provider-for-openrouter/issues",
-        "source": "https://github.com/WordPress/ai-provider-for-openrouter"
+        "issues": "https://github.com/jonathanbossenger/ai-provider-for-openrouter/issues",
+        "source": "https://github.com/jonathanbossenger/ai-provider-for-openrouter"
     },
     "require": {
         "php": ">=7.4"
     },
     "require-dev": {
+        "dealerdirect/phpcodesniffer-composer-installer": "^1.0",
+        "phpcompatibility/php-compatibility": "dev-develop",
+        "phpstan/phpstan": "~2.1",
+        "slevomat/coding-standard": "^8.20",
+        "squizlabs/php_codesniffer": "^3.7 || ^4.0",
         "wordpress/php-ai-client": "^0.4 || dev-trunk"
     },
     "suggest": {
@@ -36,10 +41,23 @@
         }
     },
     "config": {
+        "allow-plugins": {
+            "dealerdirect/phpcodesniffer-composer-installer": true,
+            "php-http/discovery": true
+        },
         "optimize-autoloader": true,
         "platform": {
             "php": "7.4"
         },
         "sort-packages": true
+    },
+    "scripts": {
+        "lint": [
+            "@phpcs",
+            "@phpstan"
+        ],
+        "phpcbf": "phpcbf",
+        "phpcs": "phpcs",
+        "phpstan": "phpstan analyze --memory-limit=256M"
     }
 }

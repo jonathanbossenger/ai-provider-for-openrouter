@@ -1,5 +1,5 @@
 === AI Provider for OpenRouter ===
-Contributors: wordpressdotorg
+Contributors: psykro
 Tags: ai, openrouter, artificial-intelligence, connector
 Requires at least: 6.9
 Tested up to: 7.0
