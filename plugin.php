@@ -1,7 +1,7 @@
 <?php
 /**
  * Plugin Name: AI Provider for OpenRouter
- * Plugin URI: https://github.com/WordPress/ai-provider-for-openrouter
+ * Plugin URI: https://github.com/jonathanbossenger/ai-provider-for-openrouter
  * Description: AI Provider for OpenRouter for the WordPress AI Client.
  * Requires at least: 6.9
  * Requires PHP: 7.4
