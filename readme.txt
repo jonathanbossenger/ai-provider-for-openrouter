@@ -14,6 +14,14 @@ AI Provider for OpenRouter for the PHP AI Client SDK.
 
 This plugin provides OpenRouter integration for the PHP AI Client SDK. It enables WordPress sites to use hundreds of AI models from various providers through OpenRouter's unified, OpenAI-compatible API.
 
+== External services ==
+
+This plugin connects to the [Open Router API](https://openrouter.ai/docs/) to generate text using a wide range of AI models.
+
+Using this plugin requires an OpenRouter API key, which can be obtained by creating an account on the [OpenRouter](https://openrouter.ai/) website. Create an account and generate an API key at https://openrouter.ai/settings/keys.
+
+You can find the OpenRouter terms of service here: https://openrouter.ai/terms, and their privacy policy here: https://openrouter.ai/privacy.
+
 **Features:**
 
 * Text generation with any OpenRouter-supported model
