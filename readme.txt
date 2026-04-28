@@ -53,6 +53,10 @@ Visit [OpenRouter](https://openrouter.ai/) to create an account and generate an 
 
 No, this plugin requires the PHP AI Client plugin to be installed and activated. It provides the OpenRouter-specific implementation that the PHP AI Client uses.
 
+= Where can I find the source code for this plugin? =
+
+The source code for this plugin is available on GitHub at https://github.com/jonathanbossenger/ai-provider-for-openrouter. You can also report issues and contribute to the plugin there.
+
 == Changelog ==
 
 = 1.0.0 =
