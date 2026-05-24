@@ -38,9 +38,12 @@ use WordPress\OpenRouterAiProvider\Provider\OpenRouterProvider;
  *     },
  *     architecture?: array{
  *         modality?: string,
+ *         input_modalities?: list<string>,
+ *         output_modalities?: list<string>,
  *         tokenizer?: string,
  *         instruct_type?: string
- *     }
+ *     },
+ *     supported_parameters?: list<string>
  * }
  * @phpstan-type OpenRouterModelsResponseData array{
  *     data: list<OpenRouterModelData>
@@ -171,12 +174,56 @@ class OpenRouterModelMetadataDirectory extends AbstractApiBasedModelMetadataDire
     {
         $options = [
             new SupportedOption(OptionEnum::systemInstruction()),
-            new SupportedOption(OptionEnum::maxTokens()),
-            new SupportedOption(OptionEnum::temperature()),
-            new SupportedOption(OptionEnum::topP()),
-            new SupportedOption(OptionEnum::stopSequences()),
             new SupportedOption(OptionEnum::customOptions()),
         ];
+
+        $supportedParameters = $this->getSupportedParameters($model);
+        if ([] === $supportedParameters) {
+            $options[] = new SupportedOption(OptionEnum::maxTokens());
+            $options[] = new SupportedOption(OptionEnum::temperature());
+            $options[] = new SupportedOption(OptionEnum::topP());
+            $options[] = new SupportedOption(OptionEnum::stopSequences());
+        } else {
+            if ($this->supportsParameter($supportedParameters, 'max_tokens')) {
+                $options[] = new SupportedOption(OptionEnum::maxTokens());
+            }
+            if ($this->supportsParameter($supportedParameters, 'temperature')) {
+                $options[] = new SupportedOption(OptionEnum::temperature());
+            }
+            if ($this->supportsParameter($supportedParameters, 'top_p')) {
+                $options[] = new SupportedOption(OptionEnum::topP());
+            }
+            if ($this->supportsParameter($supportedParameters, 'top_k')) {
+                $options[] = new SupportedOption(OptionEnum::topK());
+            }
+            if ($this->supportsParameter($supportedParameters, 'stop')) {
+                $options[] = new SupportedOption(OptionEnum::stopSequences());
+            }
+            if ($this->supportsParameter($supportedParameters, 'presence_penalty')) {
+                $options[] = new SupportedOption(OptionEnum::presencePenalty());
+            }
+            if ($this->supportsParameter($supportedParameters, 'frequency_penalty')) {
+                $options[] = new SupportedOption(OptionEnum::frequencyPenalty());
+            }
+            if ($this->supportsParameter($supportedParameters, 'logprobs')) {
+                $options[] = new SupportedOption(OptionEnum::logprobs());
+            }
+            if ($this->supportsParameter($supportedParameters, 'top_logprobs')) {
+                $options[] = new SupportedOption(OptionEnum::topLogprobs());
+            }
+            if (
+                $this->supportsParameter($supportedParameters, 'response_format') ||
+                $this->supportsParameter($supportedParameters, 'structured_outputs')
+            ) {
+                $options[] = new SupportedOption(OptionEnum::outputMimeType(), ['text/plain', 'application/json']);
+            }
+            if ($this->supportsParameter($supportedParameters, 'structured_outputs')) {
+                $options[] = new SupportedOption(OptionEnum::outputSchema());
+            }
+            if ($this->supportsParameter($supportedParameters, 'tools')) {
+                $options[] = new SupportedOption(OptionEnum::functionDeclarations());
+            }
+        }
 
         $modality = $model['architecture']['modality'] ?? 'text->text';
         $inputModalities = [ModalityEnum::text()];
@@ -193,6 +240,50 @@ class OpenRouterModelMetadataDirectory extends AbstractApiBasedModelMetadataDire
         $options[] = new SupportedOption(OptionEnum::outputModalities(), [$outputModalities]);
 
         return $options;
+    }
+
+    /**
+     * Returns normalized API parameters supported by the OpenRouter model.
+     *
+     * @since 1.0.0
+     *
+     * @param array $model Model data from OpenRouter API.
+     * @return string[] List of supported parameter names.
+     */
+    private function getSupportedParameters(array $model): array
+    {
+        $supportedParameters = $model['supported_parameters'] ?? [];
+        if (!is_array($supportedParameters)) {
+            return [];
+        }
+
+        $parameters = [];
+        foreach ($supportedParameters as $parameter) {
+            if (!is_string($parameter)) {
+                continue;
+            }
+
+            $parameter = strtolower(trim($parameter));
+            if ('' !== $parameter) {
+                $parameters[] = $parameter;
+            }
+        }
+
+        return array_values(array_unique($parameters));
+    }
+
+    /**
+     * Checks whether a normalized supported parameter list contains a parameter.
+     *
+     * @since 1.0.0
+     *
+     * @param string[] $supportedParameters Supported parameter names.
+     * @param string   $parameter Parameter name.
+     * @return bool Whether the parameter is supported.
+     */
+    private function supportsParameter(array $supportedParameters, string $parameter): bool
+    {
+        return in_array($parameter, $supportedParameters, true);
     }
 
     /**
