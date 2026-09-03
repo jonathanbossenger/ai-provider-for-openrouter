@@ -25,6 +25,7 @@ You can find the OpenRouter terms of service here: https://openrouter.ai/terms, 
 **Features:**
 
 * Text generation with any OpenRouter-supported model
+* Image generation with OpenRouter-supported image models
 * Automatic model discovery from the OpenRouter API
 * Automatic provider registration
 
@@ -59,4 +60,5 @@ No, this plugin requires the PHP AI Client plugin to be installed and activated.
 
 * Initial release
 * Support for text generation models via OpenRouter
+* Support for image generation models via OpenRouter
 * Automatic model discovery from the OpenRouter API

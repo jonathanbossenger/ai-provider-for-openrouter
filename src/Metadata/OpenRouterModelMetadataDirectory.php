@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace WordPress\OpenRouterAiProvider\Metadata;
 
+use WordPress\AiClient\Files\Enums\FileTypeEnum;
 use WordPress\AiClient\Messages\Enums\ModalityEnum;
 use WordPress\AiClient\Providers\ApiBasedImplementation\AbstractApiBasedModelMetadataDirectory;
 use WordPress\AiClient\Providers\Http\DTO\Request;
@@ -145,23 +146,16 @@ class OpenRouterModelMetadataDirectory extends AbstractApiBasedModelMetadataDire
      */
     protected function determineCapabilities(array $model): array
     {
+        $capabilities = [
+            CapabilityEnum::textGeneration(),
+            CapabilityEnum::chatHistory(),
+        ];
+
         $modality = $model['architecture']['modality'] ?? 'text->text';
         [, $outputModality] = $this->splitModality($modality);
 
-        $capabilities = [];
-
-        if (str_contains($outputModality, 'text')) {
-            $capabilities[] = CapabilityEnum::textGeneration();
-            $capabilities[] = CapabilityEnum::chatHistory();
-        }
-
         if (str_contains($outputModality, 'image')) {
             $capabilities[] = CapabilityEnum::imageGeneration();
-        }
-
-        if (empty($capabilities)) {
-            $capabilities[] = CapabilityEnum::textGeneration();
-            $capabilities[] = CapabilityEnum::chatHistory();
         }
 
         return $capabilities;
@@ -213,6 +207,11 @@ class OpenRouterModelMetadataDirectory extends AbstractApiBasedModelMetadataDire
         $options[] = new SupportedOption(OptionEnum::inputModalities(), [$inputModalities]);
         $options[] = new SupportedOption(OptionEnum::outputModalities(), [$outputModalities]);
 
+        if (str_contains($outputModality, 'image')) {
+            $options[] = new SupportedOption(OptionEnum::candidateCount());
+            $options[] = new SupportedOption(OptionEnum::outputFileType(), [FileTypeEnum::inline()]);
+        }
+
         return $options;
     }
 
@@ -238,11 +237,11 @@ class OpenRouterModelMetadataDirectory extends AbstractApiBasedModelMetadataDire
      */
     protected function splitModality(string $modality): array
     {
-        $parts = explode('->', $modality, 2);
-
-        if (count($parts) !== 2) {
+        if (!str_contains($modality, '->')) {
             return ['text', 'text'];
         }
+
+        $parts = explode('->', $modality, 2);
 
         $inputModality = $parts[0] === '' ? 'text' : $parts[0];
         $outputModality = $parts[1] === '' ? 'text' : $parts[1];

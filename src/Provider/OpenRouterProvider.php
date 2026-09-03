@@ -45,12 +45,16 @@ class OpenRouterProvider extends AbstractApiProvider
         ProviderMetadata $providerMetadata
     ): ModelInterface {
         $capabilities = $modelMetadata->getSupportedCapabilities();
+
+        foreach ($capabilities as $capability) {
+            if ($capability->isImageGeneration()) {
+                return new OpenRouterImageGenerationModel($modelMetadata, $providerMetadata);
+            }
+        }
+
         foreach ($capabilities as $capability) {
             if ($capability->isTextGeneration()) {
                 return new OpenRouterTextGenerationModel($modelMetadata, $providerMetadata);
-            }
-            if ($capability->isImageGeneration()) {
-                return new OpenRouterImageGenerationModel($modelMetadata, $providerMetadata);
             }
         }
 
