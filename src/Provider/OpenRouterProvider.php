@@ -15,6 +15,7 @@ use WordPress\AiClient\Providers\Http\Enums\RequestAuthenticationMethod;
 use WordPress\AiClient\Providers\Models\Contracts\ModelInterface;
 use WordPress\AiClient\Providers\Models\DTO\ModelMetadata;
 use WordPress\OpenRouterAiProvider\Metadata\OpenRouterModelMetadataDirectory;
+use WordPress\OpenRouterAiProvider\Models\OpenRouterImageGenerationModel;
 use WordPress\OpenRouterAiProvider\Models\OpenRouterTextGenerationModel;
 
 /**
@@ -47,6 +48,9 @@ class OpenRouterProvider extends AbstractApiProvider
         foreach ($capabilities as $capability) {
             if ($capability->isTextGeneration()) {
                 return new OpenRouterTextGenerationModel($modelMetadata, $providerMetadata);
+            }
+            if ($capability->isImageGeneration()) {
+                return new OpenRouterImageGenerationModel($modelMetadata, $providerMetadata);
             }
         }
 

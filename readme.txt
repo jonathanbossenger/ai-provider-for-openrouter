@@ -16,7 +16,7 @@ This plugin provides OpenRouter integration for the PHP AI Client SDK. It enable
 
 == External services ==
 
-This plugin connects to the [Open Router API](https://openrouter.ai/docs/) to generate text using a wide range of AI models.
+This plugin connects to the [Open Router API](https://openrouter.ai/docs/) to generate text and images using a wide range of AI models.
 
 Using this plugin requires an OpenRouter API key, which can be obtained by creating an account on the [OpenRouter](https://openrouter.ai/) website. Create an account and generate an API key at https://openrouter.ai/settings/keys.
 

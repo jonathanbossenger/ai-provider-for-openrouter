@@ -145,15 +145,23 @@ class OpenRouterModelMetadataDirectory extends AbstractApiBasedModelMetadataDire
      */
     protected function determineCapabilities(array $model): array
     {
-        $capabilities = [
-            CapabilityEnum::textGeneration(),
-            CapabilityEnum::chatHistory(),
-        ];
-
         $modality = $model['architecture']['modality'] ?? 'text->text';
+        [, $outputModality] = $this->splitModality($modality);
 
-        if (str_contains($modality, 'image')) {
+        $capabilities = [];
+
+        if (str_contains($outputModality, 'text')) {
+            $capabilities[] = CapabilityEnum::textGeneration();
+            $capabilities[] = CapabilityEnum::chatHistory();
+        }
+
+        if (str_contains($outputModality, 'image')) {
             $capabilities[] = CapabilityEnum::imageGeneration();
+        }
+
+        if (empty($capabilities)) {
+            $capabilities[] = CapabilityEnum::textGeneration();
+            $capabilities[] = CapabilityEnum::chatHistory();
         }
 
         return $capabilities;
@@ -179,14 +187,27 @@ class OpenRouterModelMetadataDirectory extends AbstractApiBasedModelMetadataDire
         ];
 
         $modality = $model['architecture']['modality'] ?? 'text->text';
-        $inputModalities = [ModalityEnum::text()];
-        $outputModalities = [ModalityEnum::text()];
+        [$inputModality, $outputModality] = $this->splitModality($modality);
+        $inputModalities = [];
+        $outputModalities = [];
 
-        if (str_contains($modality, '+image->') || str_contains($modality, 'image+')) {
+        if (str_contains($inputModality, 'text')) {
+            $inputModalities[] = ModalityEnum::text();
+        }
+        if (str_contains($inputModality, 'image')) {
             $inputModalities[] = ModalityEnum::image();
         }
-        if (str_contains($modality, '->text+image') || str_contains($modality, '->image')) {
+        if (str_contains($outputModality, 'text')) {
+            $outputModalities[] = ModalityEnum::text();
+        }
+        if (str_contains($outputModality, 'image')) {
             $outputModalities[] = ModalityEnum::image();
+        }
+        if (empty($inputModalities)) {
+            $inputModalities[] = ModalityEnum::text();
+        }
+        if (empty($outputModalities)) {
+            $outputModalities[] = ModalityEnum::text();
         }
 
         $options[] = new SupportedOption(OptionEnum::inputModalities(), [$inputModalities]);
@@ -205,5 +226,27 @@ class OpenRouterModelMetadataDirectory extends AbstractApiBasedModelMetadataDire
     protected function getModelsApiPath(): string
     {
         return '/models';
+    }
+
+    /**
+     * Splits a model modality string into input and output modalities.
+     *
+     * @since 1.0.0
+     *
+     * @param string $modality Modality string from model architecture.
+     * @return array{0: string, 1: string} Input and output modalities.
+     */
+    protected function splitModality(string $modality): array
+    {
+        $parts = explode('->', $modality, 2);
+
+        if (count($parts) !== 2) {
+            return ['text', 'text'];
+        }
+
+        $inputModality = $parts[0] === '' ? 'text' : $parts[0];
+        $outputModality = $parts[1] === '' ? 'text' : $parts[1];
+
+        return [$inputModality, $outputModality];
     }
 }
