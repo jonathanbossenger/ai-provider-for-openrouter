@@ -189,8 +189,18 @@ class OpenRouterModelMetadataDirectory extends AbstractApiBasedModelMetadataDire
             $outputModalities[] = ModalityEnum::image();
         }
 
-        $options[] = new SupportedOption(OptionEnum::inputModalities(), [$inputModalities]);
-        $options[] = new SupportedOption(OptionEnum::outputModalities(), [$outputModalities]);
+        $inputModalityValues = [[ModalityEnum::text()]];
+        if (in_array(ModalityEnum::image(), $inputModalities, true)) {
+            $inputModalityValues[] = [ModalityEnum::text(), ModalityEnum::image()];
+        }
+
+        $outputModalityValues = [[ModalityEnum::text()]];
+        if (in_array(ModalityEnum::image(), $outputModalities, true)) {
+            $outputModalityValues[] = [ModalityEnum::text(), ModalityEnum::image()];
+        }
+
+        $options[] = new SupportedOption(OptionEnum::inputModalities(), $inputModalityValues);
+        $options[] = new SupportedOption(OptionEnum::outputModalities(), $outputModalityValues);
 
         return $options;
     }
