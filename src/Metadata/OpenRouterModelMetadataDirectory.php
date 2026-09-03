@@ -38,8 +38,6 @@ use WordPress\OpenRouterAiProvider\Provider\OpenRouterProvider;
  *     },
  *     architecture?: array{
  *         modality?: string,
- *         input_modalities?: list<string>,
- *         output_modalities?: list<string>,
  *         tokenizer?: string,
  *         instruct_type?: string
  *     },
@@ -115,7 +113,7 @@ class OpenRouterModelMetadataDirectory extends AbstractApiBasedModelMetadataDire
      *
      * @since 1.0.0
      *
-     * @param array $model Model data from OpenRouter API.
+     * @phpstan-param OpenRouterModelData $model Model data from OpenRouter API.
      * @return ModelMetadata|null Model metadata or null if model should be skipped.
      */
     protected function parseModelToMetadata(array $model): ?ModelMetadata
@@ -143,8 +141,8 @@ class OpenRouterModelMetadataDirectory extends AbstractApiBasedModelMetadataDire
      *
      * @since 1.0.0
      *
-     * @param array $model Model data from OpenRouter API.
-     * @return CapabilityEnum[] List of capabilities.
+     * @phpstan-param OpenRouterModelData $model Model data from OpenRouter API.
+     * @return list<CapabilityEnum> List of capabilities.
      */
     protected function determineCapabilities(array $model): array
     {
@@ -167,62 +165,46 @@ class OpenRouterModelMetadataDirectory extends AbstractApiBasedModelMetadataDire
      *
      * @since 1.0.0
      *
-     * @param array $model Model data from OpenRouter API.
-     * @return SupportedOption[] List of supported options.
+     * @phpstan-param OpenRouterModelData $model Model data from OpenRouter API.
+     * @return list<SupportedOption> List of supported options.
      */
     protected function determineSupportedOptions(array $model): array
     {
         $options = [
             new SupportedOption(OptionEnum::systemInstruction()),
+            new SupportedOption(OptionEnum::maxTokens()),
+            new SupportedOption(OptionEnum::temperature()),
+            new SupportedOption(OptionEnum::topP()),
+            new SupportedOption(OptionEnum::stopSequences()),
             new SupportedOption(OptionEnum::customOptions()),
         ];
 
         $supportedParameters = $this->getSupportedParameters($model);
-        if ([] === $supportedParameters) {
-            $options[] = new SupportedOption(OptionEnum::maxTokens());
-            $options[] = new SupportedOption(OptionEnum::temperature());
-            $options[] = new SupportedOption(OptionEnum::topP());
-            $options[] = new SupportedOption(OptionEnum::stopSequences());
-        } else {
-            if ($this->supportsParameter($supportedParameters, 'max_tokens')) {
-                $options[] = new SupportedOption(OptionEnum::maxTokens());
+
+        $parameterOptions = [
+            'top_k' => OptionEnum::topK(),
+            'presence_penalty' => OptionEnum::presencePenalty(),
+            'frequency_penalty' => OptionEnum::frequencyPenalty(),
+            'logprobs' => OptionEnum::logprobs(),
+            'top_logprobs' => OptionEnum::topLogprobs(),
+        ];
+        foreach ($parameterOptions as $parameter => $option) {
+            if ($this->supportsParameter($supportedParameters, $parameter)) {
+                $options[] = new SupportedOption($option);
             }
-            if ($this->supportsParameter($supportedParameters, 'temperature')) {
-                $options[] = new SupportedOption(OptionEnum::temperature());
-            }
-            if ($this->supportsParameter($supportedParameters, 'top_p')) {
-                $options[] = new SupportedOption(OptionEnum::topP());
-            }
-            if ($this->supportsParameter($supportedParameters, 'top_k')) {
-                $options[] = new SupportedOption(OptionEnum::topK());
-            }
-            if ($this->supportsParameter($supportedParameters, 'stop')) {
-                $options[] = new SupportedOption(OptionEnum::stopSequences());
-            }
-            if ($this->supportsParameter($supportedParameters, 'presence_penalty')) {
-                $options[] = new SupportedOption(OptionEnum::presencePenalty());
-            }
-            if ($this->supportsParameter($supportedParameters, 'frequency_penalty')) {
-                $options[] = new SupportedOption(OptionEnum::frequencyPenalty());
-            }
-            if ($this->supportsParameter($supportedParameters, 'logprobs')) {
-                $options[] = new SupportedOption(OptionEnum::logprobs());
-            }
-            if ($this->supportsParameter($supportedParameters, 'top_logprobs')) {
-                $options[] = new SupportedOption(OptionEnum::topLogprobs());
-            }
-            if (
-                $this->supportsParameter($supportedParameters, 'response_format') ||
-                $this->supportsParameter($supportedParameters, 'structured_outputs')
-            ) {
-                $options[] = new SupportedOption(OptionEnum::outputMimeType(), ['text/plain', 'application/json']);
-            }
-            if ($this->supportsParameter($supportedParameters, 'structured_outputs')) {
-                $options[] = new SupportedOption(OptionEnum::outputSchema());
-            }
-            if ($this->supportsParameter($supportedParameters, 'tools')) {
-                $options[] = new SupportedOption(OptionEnum::functionDeclarations());
-            }
+        }
+
+        if (
+            $this->supportsParameter($supportedParameters, 'response_format') ||
+            $this->supportsParameter($supportedParameters, 'structured_outputs')
+        ) {
+            $options[] = new SupportedOption(OptionEnum::outputMimeType(), ['text/plain', 'application/json']);
+        }
+        if ($this->supportsParameter($supportedParameters, 'structured_outputs')) {
+            $options[] = new SupportedOption(OptionEnum::outputSchema());
+        }
+        if ($this->supportsParameter($supportedParameters, 'tools')) {
+            $options[] = new SupportedOption(OptionEnum::functionDeclarations());
         }
 
         $modality = $model['architecture']['modality'] ?? 'text->text';
@@ -247,8 +229,8 @@ class OpenRouterModelMetadataDirectory extends AbstractApiBasedModelMetadataDire
      *
      * @since 1.0.0
      *
-     * @param array $model Model data from OpenRouter API.
-     * @return string[] List of supported parameter names.
+     * @phpstan-param OpenRouterModelData $model Model data from OpenRouter API.
+     * @return list<string> List of supported parameter names.
      */
     private function getSupportedParameters(array $model): array
     {
