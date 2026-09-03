@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace WordPress\OpenRouterAiProvider\Metadata;
 
-use WordPress\AiClient\Files\Enums\FileTypeEnum;
 use WordPress\AiClient\Messages\Enums\ModalityEnum;
 use WordPress\AiClient\Providers\ApiBasedImplementation\AbstractApiBasedModelMetadataDirectory;
 use WordPress\AiClient\Providers\Http\DTO\Request;
@@ -209,7 +208,6 @@ class OpenRouterModelMetadataDirectory extends AbstractApiBasedModelMetadataDire
 
         if (str_contains($outputModality, 'image')) {
             $options[] = new SupportedOption(OptionEnum::candidateCount());
-            $options[] = new SupportedOption(OptionEnum::outputFileType(), [FileTypeEnum::inline()]);
         }
 
         return $options;

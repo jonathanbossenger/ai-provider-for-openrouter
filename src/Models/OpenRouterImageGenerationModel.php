@@ -74,7 +74,7 @@ class OpenRouterImageGenerationModel extends OpenRouterTextGenerationModel imple
 
         ResponseUtil::throwIfNotSuccessful($response);
 
-        return $this->parseResponseToGenerativeAiResult($response);
+        return $this->parseImageResponseToGenerativeAiResult($response);
     }
 
     /**
@@ -121,7 +121,7 @@ class OpenRouterImageGenerationModel extends OpenRouterTextGenerationModel imple
      * @return GenerativeAiResult Parsed result.
      * @throws ResponseException If response data is invalid.
      */
-    protected function parseResponseToGenerativeAiResult(Response $response): GenerativeAiResult
+    protected function parseImageResponseToGenerativeAiResult(Response $response): GenerativeAiResult
     {
         $responseData = $response->getData();
         if (!is_array($responseData) || !isset($responseData['data']) || !is_array($responseData['data'])) {
