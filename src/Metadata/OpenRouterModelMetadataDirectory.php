@@ -40,7 +40,8 @@ use WordPress\OpenRouterAiProvider\Provider\OpenRouterProvider;
  *         modality?: string,
  *         tokenizer?: string,
  *         instruct_type?: string
- *     }
+ *     },
+ *     supported_parameters?: list<string>
  * }
  * @phpstan-type OpenRouterModelsResponseData array{
  *     data: list<OpenRouterModelData>
@@ -112,7 +113,7 @@ class OpenRouterModelMetadataDirectory extends AbstractApiBasedModelMetadataDire
      *
      * @since 1.0.0
      *
-     * @param array $model Model data from OpenRouter API.
+     * @phpstan-param OpenRouterModelData $model Model data from OpenRouter API.
      * @return ModelMetadata|null Model metadata or null if model should be skipped.
      */
     protected function parseModelToMetadata(array $model): ?ModelMetadata
@@ -140,8 +141,8 @@ class OpenRouterModelMetadataDirectory extends AbstractApiBasedModelMetadataDire
      *
      * @since 1.0.0
      *
-     * @param array $model Model data from OpenRouter API.
-     * @return CapabilityEnum[] List of capabilities.
+     * @phpstan-param OpenRouterModelData $model Model data from OpenRouter API.
+     * @return list<CapabilityEnum> List of capabilities.
      */
     protected function determineCapabilities(array $model): array
     {
@@ -164,8 +165,8 @@ class OpenRouterModelMetadataDirectory extends AbstractApiBasedModelMetadataDire
      *
      * @since 1.0.0
      *
-     * @param array $model Model data from OpenRouter API.
-     * @return SupportedOption[] List of supported options.
+     * @phpstan-param OpenRouterModelData $model Model data from OpenRouter API.
+     * @return list<SupportedOption> List of supported options.
      */
     protected function determineSupportedOptions(array $model): array
     {
@@ -177,6 +178,34 @@ class OpenRouterModelMetadataDirectory extends AbstractApiBasedModelMetadataDire
             new SupportedOption(OptionEnum::stopSequences()),
             new SupportedOption(OptionEnum::customOptions()),
         ];
+
+        $supportedParameters = $this->getSupportedParameters($model);
+
+        $parameterOptions = [
+            'top_k' => OptionEnum::topK(),
+            'presence_penalty' => OptionEnum::presencePenalty(),
+            'frequency_penalty' => OptionEnum::frequencyPenalty(),
+            'logprobs' => OptionEnum::logprobs(),
+            'top_logprobs' => OptionEnum::topLogprobs(),
+        ];
+        foreach ($parameterOptions as $parameter => $option) {
+            if ($this->supportsParameter($supportedParameters, $parameter)) {
+                $options[] = new SupportedOption($option);
+            }
+        }
+
+        if (
+            $this->supportsParameter($supportedParameters, 'response_format') ||
+            $this->supportsParameter($supportedParameters, 'structured_outputs')
+        ) {
+            $options[] = new SupportedOption(OptionEnum::outputMimeType(), ['text/plain', 'application/json']);
+        }
+        if ($this->supportsParameter($supportedParameters, 'structured_outputs')) {
+            $options[] = new SupportedOption(OptionEnum::outputSchema());
+        }
+        if ($this->supportsParameter($supportedParameters, 'tools')) {
+            $options[] = new SupportedOption(OptionEnum::functionDeclarations());
+        }
 
         $modality = $model['architecture']['modality'] ?? 'text->text';
         $inputModalities = [ModalityEnum::text()];
@@ -193,6 +222,50 @@ class OpenRouterModelMetadataDirectory extends AbstractApiBasedModelMetadataDire
         $options[] = new SupportedOption(OptionEnum::outputModalities(), [$outputModalities]);
 
         return $options;
+    }
+
+    /**
+     * Returns normalized API parameters supported by the OpenRouter model.
+     *
+     * @since 1.0.0
+     *
+     * @phpstan-param OpenRouterModelData $model Model data from OpenRouter API.
+     * @return list<string> List of supported parameter names.
+     */
+    private function getSupportedParameters(array $model): array
+    {
+        $supportedParameters = $model['supported_parameters'] ?? [];
+        if (!is_array($supportedParameters)) {
+            return [];
+        }
+
+        $parameters = [];
+        foreach ($supportedParameters as $parameter) {
+            if (!is_string($parameter)) {
+                continue;
+            }
+
+            $parameter = strtolower(trim($parameter));
+            if ('' !== $parameter) {
+                $parameters[] = $parameter;
+            }
+        }
+
+        return array_values(array_unique($parameters));
+    }
+
+    /**
+     * Checks whether a normalized supported parameter list contains a parameter.
+     *
+     * @since 1.0.0
+     *
+     * @param string[] $supportedParameters Supported parameter names.
+     * @param string   $parameter Parameter name.
+     * @return bool Whether the parameter is supported.
+     */
+    private function supportsParameter(array $supportedParameters, string $parameter): bool
+    {
+        return in_array($parameter, $supportedParameters, true);
     }
 
     /**
