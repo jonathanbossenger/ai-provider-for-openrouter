@@ -140,7 +140,7 @@ class OpenRouterModelMetadataDirectory extends AbstractApiBasedModelMetadataDire
      *
      * @since 1.0.0
      *
-     * @param array $model Model data from OpenRouter API.
+     * @param array<string, mixed> $model Model data from OpenRouter API.
      * @return CapabilityEnum[] List of capabilities.
      */
     protected function determineCapabilities(array $model): array
@@ -150,9 +150,13 @@ class OpenRouterModelMetadataDirectory extends AbstractApiBasedModelMetadataDire
             CapabilityEnum::chatHistory(),
         ];
 
-        $modality = $model['architecture']['modality'] ?? 'text->text';
-
-        if (str_contains($modality, 'image')) {
+        // Only image *output* makes a model an image generator; a model that
+        // merely accepts images as input is still text-only.
+        $outputModalities = array_map(
+            static fn (ModalityEnum $modality): string => $modality->value,
+            $this->determineModalities($model, 'output')
+        );
+        if (in_array(ModalityEnum::image()->value, $outputModalities, true)) {
             $capabilities[] = CapabilityEnum::imageGeneration();
         }
 
