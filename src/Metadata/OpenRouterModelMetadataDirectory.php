@@ -112,7 +112,7 @@ class OpenRouterModelMetadataDirectory extends AbstractApiBasedModelMetadataDire
      *
      * @since 1.0.0
      *
-     * @param array $model Model data from OpenRouter API.
+     * @param array<string, mixed> $model Model data from OpenRouter API.
      * @return ModelMetadata|null Model metadata or null if model should be skipped.
      */
     protected function parseModelToMetadata(array $model): ?ModelMetadata
@@ -164,7 +164,7 @@ class OpenRouterModelMetadataDirectory extends AbstractApiBasedModelMetadataDire
      *
      * @since 1.0.0
      *
-     * @param array $model Model data from OpenRouter API.
+     * @param array<string, mixed> $model Model data from OpenRouter API.
      * @return SupportedOption[] List of supported options.
      */
     protected function determineSupportedOptions(array $model): array
@@ -178,21 +178,104 @@ class OpenRouterModelMetadataDirectory extends AbstractApiBasedModelMetadataDire
             new SupportedOption(OptionEnum::customOptions()),
         ];
 
-        $modality = $model['architecture']['modality'] ?? 'text->text';
-        $inputModalities = [ModalityEnum::text()];
-        $outputModalities = [ModalityEnum::text()];
+        // Without a parameter list, keep advertising these rather than
+        // hiding every model from prompts that use them.
+        $parameters = isset($model['supported_parameters']) && is_array($model['supported_parameters'])
+            ? array_filter($model['supported_parameters'], 'is_string')
+            : null;
+        $supportsParameter = static function (string ...$names) use ($parameters): bool {
+            return null === $parameters || [] !== array_intersect($names, $parameters);
+        };
 
-        if (str_contains($modality, '+image->') || str_contains($modality, 'image+')) {
-            $inputModalities[] = ModalityEnum::image();
+        if ($supportsParameter('tools')) {
+            $options[] = new SupportedOption(OptionEnum::functionDeclarations());
         }
-        if (str_contains($modality, '->text+image') || str_contains($modality, '->image')) {
-            $outputModalities[] = ModalityEnum::image();
+        if ($supportsParameter('response_format', 'structured_outputs')) {
+            $options[] = new SupportedOption(OptionEnum::outputMimeType(), ['text/plain', 'application/json']);
+            $options[] = new SupportedOption(OptionEnum::outputSchema());
+        } else {
+            $options[] = new SupportedOption(OptionEnum::outputMimeType(), ['text/plain']);
         }
 
-        $options[] = new SupportedOption(OptionEnum::inputModalities(), [$inputModalities]);
-        $options[] = new SupportedOption(OptionEnum::outputModalities(), [$outputModalities]);
+        $options[] = new SupportedOption(
+            OptionEnum::inputModalities(),
+            $this->textCombinations($this->determineModalities($model, 'input'))
+        );
+        $options[] = new SupportedOption(
+            OptionEnum::outputModalities(),
+            $this->textCombinations($this->determineModalities($model, 'output'))
+        );
 
         return $options;
+    }
+
+    /**
+     * Determines the non-text modalities a model accepts or produces.
+     *
+     * Reads the `input_modalities` / `output_modalities` lists, falling back
+     * to parsing the `modality` string (e.g. `text+image->text`).
+     *
+     * @since n.e.x.t
+     *
+     * @param array<string, mixed> $model Model data from OpenRouter API.
+     * @param string               $side  Either 'input' or 'output'.
+     * @return ModalityEnum[] Modalities other than text.
+     */
+    protected function determineModalities(array $model, string $side): array
+    {
+        $architecture = isset($model['architecture']) && is_array($model['architecture'])
+            ? $model['architecture']
+            : [];
+
+        $names = $architecture[$side . '_modalities'] ?? null;
+        if (!is_array($names)) {
+            $modality = isset($architecture['modality']) && is_string($architecture['modality'])
+                ? $architecture['modality']
+                : 'text->text';
+            $parts = explode('->', $modality, 2);
+            $names = explode('+', 'input' === $side ? $parts[0] : ($parts[1] ?? 'text'));
+        }
+
+        $map = [
+            'image' => ModalityEnum::image(),
+            'audio' => ModalityEnum::audio(),
+            'video' => ModalityEnum::video(),
+            'file' => ModalityEnum::document(),
+        ];
+
+        $modalities = [];
+        foreach ($names as $name) {
+            if (is_string($name) && isset($map[$name])) {
+                $modalities[$map[$name]->value] = $map[$name];
+            }
+        }
+
+        return array_values($modalities);
+    }
+
+    /**
+     * Lists every modality combination that includes text.
+     *
+     * The AI client matches a prompt's modalities against each supported
+     * value as an exact set, so a vision model must list `[text]` as well
+     * as `[text, image]` to stay eligible for a text-only prompt.
+     *
+     * @since n.e.x.t
+     *
+     * @param ModalityEnum[] $extra Modalities other than text.
+     * @return list<list<ModalityEnum>> Supported combinations.
+     */
+    protected function textCombinations(array $extra): array
+    {
+        $combinations = [[ModalityEnum::text()]];
+        foreach ($extra as $modality) {
+            foreach ($combinations as $combination) {
+                $combination[] = $modality;
+                $combinations[] = $combination;
+            }
+        }
+
+        return $combinations;
     }
 
     /**
