@@ -181,8 +181,8 @@ class OpenRouterModelMetadataDirectory extends AbstractApiBasedModelMetadataDire
 
         $supportedParameters = $this->getSupportedParameters($model);
 
+        // Do not advertise topK: the SDK's OpenAI-compatible request builder does not serialize top_k.
         $parameterOptions = [
-            'top_k' => OptionEnum::topK(),
             'presence_penalty' => OptionEnum::presencePenalty(),
             'frequency_penalty' => OptionEnum::frequencyPenalty(),
             'logprobs' => OptionEnum::logprobs(),
