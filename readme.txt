@@ -1,5 +1,5 @@
 === AI Provider for OpenRouter ===
-Contributors: psykro
+Contributors: psykro, bradvin
 Tags: ai, openrouter, artificial-intelligence, connector
 Requires at least: 6.9
 Tested up to: 7.0
