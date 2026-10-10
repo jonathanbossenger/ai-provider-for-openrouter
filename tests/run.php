@@ -8,7 +8,7 @@ if (!is_file($autoload)) {
     fwrite(STDERR, "Usage: php tests/run.php /path/to/isolated/vendor/autoload.php\n");
     exit(1);
 }
-foreach (['model-supported-options.php', 'text-contracts.php'] as $suite) {
+foreach (['model-supported-options.php', 'text-contracts.php', 'image-contracts.php'] as $suite) {
     $command = escapeshellarg(PHP_BINARY) . ' -d error_reporting=E_ALL '
         . escapeshellarg(__DIR__ . '/' . $suite) . ' ' . escapeshellarg($autoload);
     passthru($command, $result);

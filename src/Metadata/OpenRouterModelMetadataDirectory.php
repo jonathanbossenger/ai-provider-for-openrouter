@@ -145,7 +145,7 @@ class OpenRouterModelMetadataDirectory extends AbstractApiBasedModelMetadataDire
     /**
      * One normalized input/output interpretation, preferring explicit arrays.
      * Missing legacy architecture retains the text baseline; malformed explicit
-     * metadata invents no modality. Future image routes can reuse this owner.
+     * metadata invents no modality. Both routes share this canonical owner.
      *
      * @param array<string, mixed> $model Model data.
      * @return array{input: list<string>, output: list<string>}
@@ -170,21 +170,31 @@ class OpenRouterModelMetadataDirectory extends AbstractApiBasedModelMetadataDire
     }
 
     /**
-     * Only the implemented text route is advertised in this slice.
+     * Advertise only implemented routes with a text-bearing prompt.
      *
      * @param array{input: list<string>, output: list<string>} $modalities Modalities.
      * @return list<CapabilityEnum> Supported capabilities.
      */
     protected function determineCapabilities(array $modalities): array
     {
-        if (!in_array('text', $modalities['input'], true) || !in_array('text', $modalities['output'], true)) {
+        if (!in_array('text', $modalities['input'], true)) {
             return [];
         }
-        return [CapabilityEnum::textGeneration(), CapabilityEnum::chatHistory()];
+        $capabilities = [];
+        if (in_array('text', $modalities['output'], true)) {
+            $capabilities = [CapabilityEnum::textGeneration(), CapabilityEnum::chatHistory()];
+        }
+        if (in_array('image', $modalities['output'], true)) {
+            $capabilities[] = CapabilityEnum::imageGeneration();
+            if ($capabilities === [CapabilityEnum::imageGeneration()]) {
+                $capabilities[] = CapabilityEnum::chatHistory();
+            }
+        }
+        return $capabilities;
     }
 
     /**
-     * Serialized options and exact modality sets for the text route.
+     * Serialized options and exact modality sets for text and image routes.
      *
      * @param array<string, mixed> $model Model data.
      * @param array{input: list<string>, output: list<string>} $modalities Modalities.
@@ -223,13 +233,28 @@ class OpenRouterModelMetadataDirectory extends AbstractApiBasedModelMetadataDire
         }
         $supportedOptions[] = new SupportedOption(OptionEnum::outputMimeType(), $mimeTypes);
 
+        if (!in_array('text', $modalities['output'], true)) {
+            // Image-only models must not inherit text options they cannot serialize.
+            $supportedOptions = [
+                new SupportedOption(OptionEnum::systemInstruction()),
+                new SupportedOption(OptionEnum::customOptions()),
+            ];
+        }
+
         // SDK matches exact sets. Advertise only the implemented prompt forms.
         $inputSets = [[ModalityEnum::text()]];
         if (in_array('image', $modalities['input'], true)) {
             $inputSets[] = [ModalityEnum::text(), ModalityEnum::image()];
         }
         $supportedOptions[] = new SupportedOption(OptionEnum::inputModalities(), $inputSets);
-        $supportedOptions[] = new SupportedOption(OptionEnum::outputModalities(), [[ModalityEnum::text()]]);
+        $outputSets = [];
+        if (in_array('text', $modalities['output'], true)) {
+            $outputSets[] = [ModalityEnum::text()];
+        }
+        if (in_array('image', $modalities['output'], true)) {
+            $outputSets[] = [ModalityEnum::image()];
+        }
+        $supportedOptions[] = new SupportedOption(OptionEnum::outputModalities(), $outputSets);
         return $supportedOptions;
     }
 

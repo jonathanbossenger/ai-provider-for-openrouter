@@ -1,0 +1,65 @@
+{
+  "data": [
+    {
+      "id": "fixture/dual",
+      "architecture": {
+        "input_modalities": [
+          "text",
+          "image"
+        ],
+        "output_modalities": [
+          "text",
+          "image"
+        ]
+      },
+      "supported_parameters": [
+        "tools",
+        "structured_outputs"
+      ]
+    },
+    {
+      "id": "fixture/image-only",
+      "architecture": {
+        "input_modalities": [
+          "text",
+          "image"
+        ],
+        "output_modalities": [
+          "image"
+        ]
+      },
+      "supported_parameters": [
+        "tools",
+        "structured_outputs"
+      ]
+    },
+    {
+      "id": "fixture/text-input-image",
+      "architecture": {
+        "modality": "text->image"
+      },
+      "supported_parameters": [
+        "tools",
+        "structured_outputs"
+      ]
+    },
+    {
+      "id": "fixture/text",
+      "architecture": {
+        "modality": "text->text"
+      },
+      "supported_parameters": [
+        "tools",
+        "structured_outputs"
+      ]
+    },
+    {
+      "id": "fixture/missing",
+      "architecture": {},
+      "supported_parameters": [
+        "tools",
+        "structured_outputs"
+      ]
+    }
+  ]
+}

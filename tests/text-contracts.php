@@ -285,13 +285,17 @@ foreach (['array-fields' => ['input_modalities' => ['text', 'image'], 'output_mo
         rejectBeforeTransport(['architecture' => $architecture], $config, 'does not support');
     };
 }
-$tests['dual output metadata permits ordinary text only, no image generation route'] = static function (): void {
-    $model = metadata(['architecture' => ['modality' => 'text+image->text+image']]);
+$tests['dual output metadata preserves text and adds separate image-only output'] = static function (): void {
+    $extra = ['architecture' => ['modality' => 'text+image->text+image']];
+    $model = metadata($extra);
     expectSame(true, isSelected($model, new ModelConfig()), 'Ordinary text on dual-output model');
-    expectSame(false, in_array(CapabilityEnum::imageGeneration(), $model->getSupportedCapabilities(), true), 'Image capability paused');
+    expectSame(true, in_array(CapabilityEnum::imageGeneration(), $model->getSupportedCapabilities(), true), 'Implemented image capability');
     $config = new ModelConfig();
     $config->setOutputModalities([ModalityEnum::image()]);
-    expectSame(false, isSelected($model, $config), 'Image-only output not advertised yet');
+    expectSame(true, ModelRequirements::fromPromptData(CapabilityEnum::imageGeneration(), prompt(), $config)->areMetBy($model), 'Image-only SDK output selected');
+    rejectBeforeTransport($extra, $config, 'text output modality');
+    $config->setOutputModalities([ModalityEnum::text(), ModalityEnum::image()]);
+    expectSame(false, isSelected($model, $config), 'Mixed output stays unsupported');
 };
 $tests['explicit supported provider requirement and schema description preserved'] = static function (): void {
     $config = schemaConfig(['name' => 'answer', 'schema' => fixture('schema'), 'description' => 'Answer envelope']);
@@ -321,7 +325,7 @@ $tests['empty object schema remains JSON object in the encoded request'] = stati
 };
 $tests['unsupported architectures excluded and explicit directional arrays take precedence'] = static function (): void {
     $directory = new MetadataDirectoryForTest();
-    foreach ([['modality' => 'text->image'], ['modality' => 'image->text'], ['modality' => 'audio->audio'], ['modality' => 'nonsense'], ['input_modalities' => 'text', 'output_modalities' => ['text']], ['input_modalities' => ['text'], 'output_modalities' => [false, null]], 'malformed'] as $architecture) {
+    foreach ([['modality' => 'image->text'], ['modality' => 'audio->audio'], ['modality' => 'nonsense'], ['input_modalities' => 'text', 'output_modalities' => ['text']], ['input_modalities' => ['text'], 'output_modalities' => [false, null]], 'malformed'] as $architecture) {
         expectSame(null, $directory->parseOptionalFixture(['id' => 'fixture/unsupported', 'architecture' => $architecture]), 'Unsupported model excluded');
     }
     $model = metadata(['architecture' => ['modality' => 'text+image->image', 'input_modalities' => ['text'], 'output_modalities' => ['text']]]);
