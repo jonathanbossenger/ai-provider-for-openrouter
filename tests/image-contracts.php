@@ -118,6 +118,54 @@ function imageResponseReject(Response $response): void
     throw new RuntimeException('Expected controlled ResponseException');
 }
 
+// Trap SDK/File stream retrieval as well as enforcing the mock transport's route allowlist.
+class OptionalImageUrlTrap
+{
+    public $context;
+    public static array $attempts = [];
+
+    public function stream_open($path, $mode, $options, &$openedPath): bool
+    {
+        self::$attempts[] = $path;
+        throw new RuntimeException('Unexpected image URL download');
+    }
+
+    public function url_stat($path, $flags)
+    {
+        self::$attempts[] = $path;
+        throw new RuntimeException('Unexpected image URL stat');
+    }
+}
+
+function withoutOptionalImageDownloads(callable $action): void
+{
+    OptionalImageUrlTrap::$attempts = [];
+    foreach (['http', 'https'] as $scheme) {
+        stream_wrapper_unregister($scheme);
+        stream_wrapper_register($scheme, OptionalImageUrlTrap::class);
+    }
+    try {
+        $action();
+    } finally {
+        foreach (['http', 'https'] as $scheme) {
+            stream_wrapper_restore($scheme);
+        }
+        expectSame([], OptionalImageUrlTrap::$attempts, 'No URL opens/stats');
+    }
+}
+
+function optionalImageResponse(): array
+{
+    $data = imageFixture('image-response');
+    // Real 1x1 PNG, but the surrounding response remains synthetic/offline.
+    $png = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+ip1sAAAAASUVORK5CYII=';
+    $data['choices'][0]['message']['content'] = null;
+    $data['choices'][0]['message']['images'][0]['image_url']['url'] = $png;
+    $data['choices'][1]['message']['content'] = 'Second candidate.';
+    $data['choices'][1]['message']['images'][0]['image_url']['url'] = $png;
+    return $data;
+}
+
 $tests = [
     'normal SDK image builder discovers dual and image-only models with exact route payload' => static function (): void {
         foreach (['fixture/dual' => ['text', 'image'], 'fixture/image-only' => ['image']] as $id => $modalities) {
@@ -219,6 +267,90 @@ $tests = [
         expectSame('offline-user', $data['user'], 'User retained');
     },
 ];
+
+$optionalFields = ['tool_calls', 'function_call', 'audio', 'video'];
+$placeholders = ['absent' => []];
+foreach ($optionalFields as $key) {
+    $placeholders[$key . '=null'] = [$key => null];
+    $placeholders[$key . '=[]'] = [$key => []];
+}
+foreach (['fixture/dual' => ['text', 'image'], 'fixture/image-only' => ['image']] as $id => $modalities) {
+    foreach ($placeholders as $label => $fields) {
+        $tests['normal SDK optional image fields ' . $id . ' ' . $label] = static function () use ($id, $modalities, $fields): void {
+            withoutOptionalImageDownloads(static function () use ($id, $modalities, $fields): void {
+                $data = optionalImageResponse();
+                foreach ($data['choices'] as &$choice) {
+                    $choice['message'] = array_merge($choice['message'], $fields);
+                }
+                unset($choice);
+                $transport = new ImageFixtureTransport();
+                $transport->responses[] = imageResponse($data);
+                $result = imageBuilder($transport, $id)->generateImageResult();
+                expectSame($id, $result->getModelMetadata()->getId(), 'Normal SDK model selection');
+                expectSame($data['id'], $result->getId(), 'Result ID unchanged');
+                expectSame(1, count($transport->generations()), 'Exactly one image request, no tool followup');
+                $request = $transport->generations()[0];
+                expectSame(OpenRouterProvider::url('/chat/completions'), $request->getUri(), 'Image route');
+                expectSame('POST', $request->getMethod()->value, 'POST');
+                $wire = json_decode($request->getBody(), true, 512, JSON_THROW_ON_ERROR);
+                expectSame([
+                    'model' => $id,
+                    'messages' => [['role' => 'user', 'content' => [['type' => 'text', 'text' => 'draw a tree']]]],
+                    'modalities' => $modalities,
+                ], $wire, 'Actual encoded payload; no tools/schema leakage');
+                expectSame(2, count($result->getCandidates()), 'Candidate count retained');
+                foreach ($result->getCandidates() as $index => $candidate) {
+                    expectSame('stop', $candidate->getFinishReason()->value, 'Finish reason retained');
+                    $parts = $candidate->getMessage()->getParts();
+                    expectSame(2, count($parts), 'Image-only first candidate, text then image second');
+                    if ($index === 1) {
+                        expectSame('text', $parts[0]->getType()->value, 'Text precedes image');
+                        expectSame('Second candidate.', $parts[0]->getText(), 'Optional text retained');
+                        array_shift($parts);
+                    }
+                    foreach ($parts as $imageIndex => $part) {
+                        expectSame('file', $part->getType()->value, 'Only files, no function execution payload');
+                        $uri = $data['choices'][$index]['message']['images'][$imageIndex]['image_url']['url'];
+                        expectSame($uri, $part->getFile()->getDataUri(), 'Image bytes and order retained');
+                        expectSame($index === 0 && $imageIndex === 1 ? 'image/svg+xml' : 'image/png', $part->getFile()->getMimeType(), 'Declared MIME retained');
+                    }
+                }
+                expectSame([10, 20, 30], [$result->getTokenUsage()->getPromptTokens(), $result->getTokenUsage()->getCompletionTokens(), $result->getTokenUsage()->getTotalTokens()], 'Usage unchanged');
+                expectSame($data['usage'], $result->getAdditionalData()['openrouter_usage'], 'Raw nested usage unchanged');
+                expectSame([], $result->getAdditionalData()['openrouter_unknown_token_counts'], 'No invented unknowns');
+                expectSame($data['model'], $result->getAdditionalData()['model'], 'Reported model unchanged');
+            });
+        };
+    }
+}
+$unsupportedPayloads = [
+    'tool_calls' => [['id' => 'call', 'type' => 'function', 'function' => ['name' => 'lookup', 'arguments' => '{}']]],
+    'function_call' => ['name' => 'lookup', 'arguments' => '{}'],
+    'audio' => ['data' => 'YWJj', 'format' => 'mp3'],
+    'video' => ['url' => 'https://fixtures.invalid/movie.mp4'],
+];
+foreach ($optionalFields as $key) {
+    foreach ([0, false, '', 'unsupported', [null], $unsupportedPayloads[$key]] as $variant => $value) {
+        $tests['optional image field strict rejection ' . $key . ' ' . $variant] = static function () use ($key, $value): void {
+            withoutOptionalImageDownloads(static function () use ($key, $value): void {
+                foreach ([0, 1] as $index) {
+                    $data = optionalImageResponse();
+                    $data['choices'][$index]['message'][$key] = $value;
+                    $transport = new ImageFixtureTransport();
+                    $transport->responses[] = imageResponse($data);
+                    try {
+                        imageBuilder($transport)->generateImageResult();
+                    } catch (ResponseException $error) {
+                        expectSame('Unexpected OpenRouter API response: Invalid "choices[' . $index . '].message.' . $key . '" key: Unsupported image response part.', $error->getMessage(), 'Exact controlled field rejection, not another parser failure');
+                        expectSame(1, count($transport->generations()), 'One request, no tool or media followup');
+                        continue;
+                    }
+                    throw new RuntimeException('Expected controlled ResponseException for actual/malformed payload');
+                }
+            });
+        };
+    }
+}
 
 foreach (['image/png', 'image/jpeg', 'image/webp', 'image/gif', 'image/svg+xml', 'IMAGE/PNG'] as $mime) {
     $tests['supported result MIME preserved ' . $mime] = static function () use ($mime): void {

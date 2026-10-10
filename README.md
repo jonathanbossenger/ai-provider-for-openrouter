@@ -79,6 +79,11 @@ routing custom options are supported. Generated results require valid inline ima
 data URIs; remote result URLs are rejected rather than fetched or assigned a guessed
 MIME. Accompanying text and image/candidate order are retained.
 
+For image responses, optional `tool_calls`, `function_call`, `audio`, and `video`
+fields may be absent, `null`, or exactly `[]` (no payload). Every other value,
+including falsy scalars (`0`, `false`, `''`) and nonempty arrays/objects, is rejected.
+This placeholder tolerance does not add tool execution or audio/video output support.
+
 For image usage, prompt/completion/total token counts remain distinct. SDK 0.4.3
 cannot express null counts: missing counts use this provider's explicit -1 unknown
 sentinel, never fabricated zero. Do not sum or bill unknown counts. Original usage

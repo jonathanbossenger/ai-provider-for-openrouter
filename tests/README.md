@@ -69,8 +69,8 @@ They prove no typed topK is selectable when the SDK omits top_k, preserving othe
 
 ## Image contract gate
 
-The runner also executes 104 image contracts (161 tests total: 14 options, 43 text,
-104 image). Real SDK registry/PromptBuilder `generateImageResult()` performs normal
+The runner also executes 146 image contracts (203 tests total: 14 options, 43 text,
+146 image). Real SDK registry/PromptBuilder `generateImageResult()` performs normal
 image-only requirement selection and interface dispatch. Synthetic dual-output,
 image-only, text-only and malformed metadata fixtures and a strict mock transport
 exercise requests and results. No generated/input URL or local path is retrieved.

@@ -305,8 +305,9 @@ class OpenRouterImageGenerationModel extends OpenRouterTextGenerationModel imple
         if (!is_array($message) || (isset($message['role']) && $message['role'] !== 'assistant')) {
             throw $this->invalidImageResponse($path . '.message', 'Expected an assistant message object.');
         }
+        // Optional placeholders carry no payload; never treat malformed falsy values as absent.
         foreach (['tool_calls', 'function_call', 'audio', 'video'] as $key) {
-            if (array_key_exists($key, $message)) {
+            if (array_key_exists($key, $message) && $message[$key] !== null && $message[$key] !== []) {
                 throw $this->invalidImageResponse($path . '.message.' . $key, 'Unsupported image response part.');
             }
         }
