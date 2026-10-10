@@ -1,0 +1,48 @@
+{
+  "data": [
+    {
+      "id": "fixture/json-only",
+      "name": "JSON-only decoy",
+      "architecture": {
+        "input_modalities": [
+          "text"
+        ],
+        "output_modalities": [
+          "text"
+        ]
+      },
+      "supported_parameters": [
+        "response_format"
+      ]
+    },
+    {
+      "id": "fixture/tools-only",
+      "name": "Tools-only decoy",
+      "architecture": {
+        "modality": "text->text"
+      },
+      "supported_parameters": [
+        "tools"
+      ]
+    },
+    {
+      "id": "fixture/vision",
+      "name": "Compatible vision fixture",
+      "architecture": {
+        "modality": "text+image->text",
+        "input_modalities": [
+          "text",
+          "image"
+        ],
+        "output_modalities": [
+          "text"
+        ]
+      },
+      "supported_parameters": [
+        " TOOLS ",
+        " STRUCTURED_OUTPUTS ",
+        "tools"
+      ]
+    }
+  ]
+}

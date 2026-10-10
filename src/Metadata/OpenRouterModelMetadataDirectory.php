@@ -37,10 +37,13 @@ use WordPress\OpenRouterAiProvider\Provider\OpenRouterProvider;
  *         is_moderated?: bool
  *     },
  *     architecture?: array{
+ *         input_modalities?: list<string>,
+ *         output_modalities?: list<string>,
  *         modality?: string,
  *         tokenizer?: string,
  *         instruct_type?: string
- *     }
+ *     },
+ *     supported_parameters?: list<string>
  * }
  * @phpstan-type OpenRouterModelsResponseData array{
  *     data: list<OpenRouterModelData>
@@ -112,20 +115,24 @@ class OpenRouterModelMetadataDirectory extends AbstractApiBasedModelMetadataDire
      *
      * @since 1.0.0
      *
-     * @param array $model Model data from OpenRouter API.
+     * @param array<string, mixed> $model Model data from OpenRouter API.
      * @return ModelMetadata|null Model metadata or null if model should be skipped.
      */
     protected function parseModelToMetadata(array $model): ?ModelMetadata
     {
-        if (!isset($model['id']) || empty($model['id'])) {
+        if (!isset($model['id']) || !is_string($model['id']) || $model['id'] === '') {
             return null;
         }
 
         $modelId = $model['id'];
-        $modelName = $model['name'] ?? $modelId;
+        $modelName = isset($model['name']) && is_string($model['name']) ? $model['name'] : $modelId;
 
-        $capabilities = $this->determineCapabilities($model);
-        $options = $this->determineSupportedOptions($model);
+        $modalities = $this->getModalities($model);
+        $capabilities = $this->determineCapabilities($modalities);
+        if ($capabilities === []) {
+            return null;
+        }
+        $options = $this->determineSupportedOptions($model, $modalities);
 
         return new ModelMetadata(
             $modelId,
@@ -136,40 +143,66 @@ class OpenRouterModelMetadataDirectory extends AbstractApiBasedModelMetadataDire
     }
 
     /**
-     * Determines model capabilities based on OpenRouter model data.
+     * One normalized input/output interpretation, preferring explicit arrays.
+     * Missing legacy architecture retains the text baseline; malformed explicit
+     * metadata invents no modality. Both routes share this canonical owner.
      *
-     * @since 1.0.0
-     *
-     * @param array $model Model data from OpenRouter API.
-     * @return CapabilityEnum[] List of capabilities.
+     * @param array<string, mixed> $model Model data.
+     * @return array{input: list<string>, output: list<string>}
      */
-    protected function determineCapabilities(array $model): array
+    protected function getModalities(array $model): array
     {
-        $capabilities = [
-            CapabilityEnum::textGeneration(),
-            CapabilityEnum::chatHistory(),
-        ];
-
-        $modality = $model['architecture']['modality'] ?? 'text->text';
-
-        if (str_contains($modality, 'image')) {
-            $capabilities[] = CapabilityEnum::imageGeneration();
+        $architecture = $model['architecture'] ?? [];
+        if (!is_array($architecture)) {
+            return ['input' => [], 'output' => []];
         }
+        $legacy = $architecture['modality'] ?? 'text->text';
+        $parts = is_string($legacy) ? explode('->', $legacy) : [];
+        $modalities = [];
+        foreach (['input', 'output'] as $index => $direction) {
+            $key = $direction . '_modalities';
+            $values = array_key_exists($key, $architecture)
+                ? $architecture[$key]
+                : (count($parts) === 2 ? explode('+', $parts[$index]) : []);
+            $modalities[$direction] = $this->normalizeStrings($values);
+        }
+        return $modalities;
+    }
 
+    /**
+     * Advertise only implemented routes with a text-bearing prompt.
+     *
+     * @param array{input: list<string>, output: list<string>} $modalities Modalities.
+     * @return list<CapabilityEnum> Supported capabilities.
+     */
+    protected function determineCapabilities(array $modalities): array
+    {
+        if (!in_array('text', $modalities['input'], true)) {
+            return [];
+        }
+        $capabilities = [];
+        if (in_array('text', $modalities['output'], true)) {
+            $capabilities = [CapabilityEnum::textGeneration(), CapabilityEnum::chatHistory()];
+        }
+        if (in_array('image', $modalities['output'], true)) {
+            $capabilities[] = CapabilityEnum::imageGeneration();
+            if ($capabilities === [CapabilityEnum::imageGeneration()]) {
+                $capabilities[] = CapabilityEnum::chatHistory();
+            }
+        }
         return $capabilities;
     }
 
     /**
-     * Determines supported options based on OpenRouter model data.
+     * Serialized options and exact modality sets for text and image routes.
      *
-     * @since 1.0.0
-     *
-     * @param array $model Model data from OpenRouter API.
-     * @return SupportedOption[] List of supported options.
+     * @param array<string, mixed> $model Model data.
+     * @param array{input: list<string>, output: list<string>} $modalities Modalities.
+     * @return list<SupportedOption> Supported options.
      */
-    protected function determineSupportedOptions(array $model): array
+    protected function determineSupportedOptions(array $model, array $modalities): array
     {
-        $options = [
+        $supportedOptions = [
             new SupportedOption(OptionEnum::systemInstruction()),
             new SupportedOption(OptionEnum::maxTokens()),
             new SupportedOption(OptionEnum::temperature()),
@@ -177,22 +210,87 @@ class OpenRouterModelMetadataDirectory extends AbstractApiBasedModelMetadataDire
             new SupportedOption(OptionEnum::stopSequences()),
             new SupportedOption(OptionEnum::customOptions()),
         ];
-
-        $modality = $model['architecture']['modality'] ?? 'text->text';
-        $inputModalities = [ModalityEnum::text()];
-        $outputModalities = [ModalityEnum::text()];
-
-        if (str_contains($modality, '+image->') || str_contains($modality, 'image+')) {
-            $inputModalities[] = ModalityEnum::image();
+        $supportedParameters = $this->getSupportedParameters($model);
+        $parameterOptions = [
+            'presence_penalty' => OptionEnum::presencePenalty(),
+            'frequency_penalty' => OptionEnum::frequencyPenalty(),
+            'logprobs' => OptionEnum::logprobs(),
+            'top_logprobs' => OptionEnum::topLogprobs(),
+            'tools' => OptionEnum::functionDeclarations(),
+        ];
+        foreach ($parameterOptions as $parameter => $option) {
+            if (in_array($parameter, $supportedParameters, true)) {
+                $supportedOptions[] = new SupportedOption($option);
+            }
         }
-        if (str_contains($modality, '->text+image') || str_contains($modality, '->image')) {
-            $outputModalities[] = ModalityEnum::image();
+        $schema = in_array('structured_outputs', $supportedParameters, true);
+        if ($schema) {
+            $supportedOptions[] = new SupportedOption(OptionEnum::outputSchema());
+        }
+        $mimeTypes = ['text/plain'];
+        if ($schema || in_array('response_format', $supportedParameters, true)) {
+            $mimeTypes[] = 'application/json';
+        }
+        $supportedOptions[] = new SupportedOption(OptionEnum::outputMimeType(), $mimeTypes);
+
+        if (!in_array('text', $modalities['output'], true)) {
+            // Image-only models must not inherit text options they cannot serialize.
+            $supportedOptions = [
+                new SupportedOption(OptionEnum::systemInstruction()),
+                new SupportedOption(OptionEnum::customOptions()),
+            ];
         }
 
-        $options[] = new SupportedOption(OptionEnum::inputModalities(), [$inputModalities]);
-        $options[] = new SupportedOption(OptionEnum::outputModalities(), [$outputModalities]);
+        // SDK matches exact sets. Advertise only the implemented prompt forms.
+        $inputSets = [[ModalityEnum::text()]];
+        if (in_array('image', $modalities['input'], true)) {
+            $inputSets[] = [ModalityEnum::text(), ModalityEnum::image()];
+        }
+        $supportedOptions[] = new SupportedOption(OptionEnum::inputModalities(), $inputSets);
+        $outputSets = [];
+        if (in_array('text', $modalities['output'], true)) {
+            $outputSets[] = [ModalityEnum::text()];
+        }
+        if (in_array('image', $modalities['output'], true)) {
+            $outputSets[] = [ModalityEnum::image()];
+        }
+        $supportedOptions[] = new SupportedOption(OptionEnum::outputModalities(), $outputSets);
+        return $supportedOptions;
+    }
 
-        return $options;
+    /**
+     * Returns normalized API parameters supported by the OpenRouter model.
+     *
+     * @since 1.0.0
+     *
+     * @param array<string, mixed> $model Model data from OpenRouter API.
+     * @return list<string> List of supported parameter names.
+     */
+    private function getSupportedParameters(array $model): array
+    {
+        return $this->normalizeStrings($model['supported_parameters'] ?? []);
+    }
+
+    /**
+     * @param mixed $values Untrusted API metadata.
+     * @return list<string> Normalized, nonempty, distinct string values.
+     */
+    private function normalizeStrings($values): array
+    {
+        if (!is_array($values)) {
+            return [];
+        }
+        $normalized = [];
+        foreach ($values as $value) {
+            if (!is_string($value)) {
+                continue;
+            }
+            $value = strtolower(trim($value, " \n\r\t\v\0"));
+            if ($value !== '') {
+                $normalized[] = $value;
+            }
+        }
+        return array_values(array_unique($normalized));
     }
 
     /**

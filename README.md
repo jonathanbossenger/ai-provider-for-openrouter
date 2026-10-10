@@ -64,6 +64,36 @@ echo $result->toText();
 
 Available models are dynamically discovered from the OpenRouter API. This includes hundreds of models from providers like OpenAI, Anthropic, Google, Meta, Mistral, and many more. See the [OpenRouter documentation](https://openrouter.ai/models) for the full list of available models.
 
+## Image generation and editing
+
+The normal SDK `generateImageResult()` operation selects compatible discovered
+image-output models. Image-only and dual text/image models use OpenRouter Chat
+Completions; ordinary text/tools/schema operations on dual models stay unchanged.
+Prompts support text and, where model metadata allows, reference image files.
+This adapter does not implement the separate dedicated Image API.
+
+Image calls reject unsupported options locally, including explicit output count,
+size/aspect/orientation, MIME/file type, tools/schema, sampling and streaming.
+Only system instructions, image-only output requirements, and bounded user/provider
+routing custom options are supported. Generated results require valid inline image
+data URIs; remote result URLs are rejected rather than fetched or assigned a guessed
+MIME. Accompanying text and image/candidate order are retained.
+
+For image responses, optional `tool_calls`, `function_call`, `audio`, and `video`
+fields may be absent, `null`, or exactly `[]` (no payload). Every other value,
+including falsy scalars (`0`, `false`, `''`) and nonempty arrays/objects, is rejected.
+This placeholder tolerance does not add tool execution or audio/video output support.
+
+For image usage, prompt/completion/total token counts remain distinct. SDK 0.4.3
+cannot express null counts: missing counts use this provider's explicit -1 unknown
+sentinel, never fabricated zero. Do not sum or bill unknown counts. Original usage
+is retained in result additional data under `openrouter_usage`, with missing names
+in `openrouter_unknown_token_counts`. This is not a universal SDK convention.
+
+See [the offline contract tests](tests/README.md) in a Git checkout for exact supported
+forms, limitations, provenance and replay commands. Live OpenRouter/WordPress
+acceptance and actual PHP 7.4 runtime verification are not claimed by offline tests.
+
 ## Configuration
 
 The provider uses the `OPENROUTER_API_KEY` environment variable for authentication. You can set this in your environment or via PHP:
