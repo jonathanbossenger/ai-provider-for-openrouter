@@ -1,0 +1,27 @@
+{
+  "id": "fixture-tool",
+  "choices": [
+    {
+      "message": {
+        "role": "assistant",
+        "content": null,
+        "tool_calls": [
+          {
+            "id": "call_fixture",
+            "type": "function",
+            "function": {
+              "name": "lookup",
+              "arguments": "{\"query\":\"hello\"}"
+            }
+          }
+        ]
+      },
+      "finish_reason": "tool_calls"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 11,
+    "completion_tokens": 7,
+    "total_tokens": 18
+  }
+}
