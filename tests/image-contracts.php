@@ -596,4 +596,41 @@ $tests['empty custom provider routing array rejected rather than wrong JSON shap
     $config->setCustomOptions(['provider' => []]);
     imageReject($config);
 };
+$tests['provider image routing accepts documented ordering and rejects malformed lists'] = static function (): void {
+    $config = new ModelConfig();
+    $config->setCustomOptions(['provider' => [
+        'only' => ['FixtureOne'], 'order' => ['FixtureTwo'], 'ignore' => [],
+        'sort' => 'latency', 'allow_fallbacks' => false,
+    ]]);
+    $transport = new ImageFixtureTransport();
+    directImage($transport, $config)->generateImageResult(prompt());
+    expectSame($config->getCustomOptions()['provider'], $transport->generations()[0]->getData()['provider'],
+        'Bounded routing object unchanged on actual request');
+    foreach ([['only' => ['slug' => 'FixtureOne']], ['order' => [null]], ['ignore' => ['']]] as $provider) {
+        $bad = new ModelConfig();
+        $bad->setCustomOptions(['provider' => $provider]);
+        imageReject($bad);
+    }
+};
+$tests['malformed image usage shape and assistant role return controlled response errors'] = static function (): void {
+    foreach ([['prompt_tokens' => 1], ['not' => 'usage']] as $list) {
+        $data = imageFixture('image-response');
+        $data['usage'] = array_values($list);
+        imageResponseReject(imageResponse($data));
+    }
+    foreach (['user', 0, []] as $role) {
+        $data = imageFixture('image-response');
+        $data['choices'][0]['message']['role'] = $role;
+        imageResponseReject(imageResponse($data));
+    }
+};
+$tests['missing optional image result id uses an empty identifier without losing candidates'] = static function (): void {
+    $data = imageFixture('image-response');
+    unset($data['id']);
+    $transport = new ImageFixtureTransport();
+    $transport->responses[] = imageResponse($data);
+    $result = imageBuilder($transport)->generateImageResult();
+    expectSame('', $result->getId(), 'Missing optional identifier uses SDK-compatible empty string');
+    expectSame(2, count($result->getCandidates()), 'Image candidates retained');
+};
 runTests($tests);

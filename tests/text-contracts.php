@@ -19,13 +19,16 @@ use WordPress\AiClient\Providers\Http\DTO\ApiKeyRequestAuthentication;
 use WordPress\AiClient\Providers\Http\DTO\Request;
 use WordPress\AiClient\Providers\Http\DTO\RequestOptions;
 use WordPress\AiClient\Providers\Http\DTO\Response;
+use WordPress\AiClient\Providers\Http\Exception\ResponseException;
 use WordPress\AiClient\Providers\Models\DTO\ModelConfig;
 use WordPress\AiClient\Providers\Models\DTO\ModelRequirements;
+use WordPress\AiClient\Providers\Models\DTO\ModelMetadata;
 use WordPress\AiClient\Providers\Models\Enums\CapabilityEnum;
 use WordPress\AiClient\Providers\ProviderRegistry;
 use WordPress\AiClient\Tools\DTO\FunctionDeclaration;
 use WordPress\AiClient\Tools\DTO\FunctionResponse;
 use WordPress\OpenRouterAiProvider\Models\OpenRouterTextGenerationModel;
+use WordPress\OpenRouterAiProvider\Metadata\OpenRouterModelMetadataDirectory;
 use WordPress\OpenRouterAiProvider\Provider\OpenRouterProvider;
 
 require __DIR__ . '/harness.php';
@@ -49,6 +52,27 @@ class FixtureTransport implements HttpTransporterInterface
         $this->requests[] = $request;
         $response = array_shift($this->responses) ?? fixture('text-response');
         return new Response(200, ['Content-Type' => 'application/json'], json_encode($response));
+    }
+}
+
+class MalformedModelsTransport extends FixtureTransport
+{
+    public function send(Request $request, ?RequestOptions $options = null): Response
+    {
+        $this->requests[] = $request;
+        return new Response(200, ['Content-Type' => 'application/json'], '{"models":[]}');
+    }
+}
+
+class MixedModelsTransport extends FixtureTransport
+{
+    public function send(Request $request, ?RequestOptions $options = null): Response
+    {
+        $this->requests[] = $request;
+        return new Response(200, ['Content-Type' => 'application/json'], json_encode(['data' => [
+            ['name' => 'Missing ID'], ['id' => ''], ['id' => 7],
+            ['id' => 'fixture/discovered'],
+        ]]));
     }
 }
 
@@ -283,6 +307,25 @@ $tests = [
         $body = json_decode($transport->requests[0]->getBody(), true, 512, JSON_THROW_ON_ERROR);
         expectSame(['name' => 'response', 'schema' => $schema], $body['response_format']['json_schema'], 'Optional schema fields retained without invented strict');
     },
+    'optional answer property with strict false survives a real encoded request' => static function (): void {
+        $schema = [
+            'type' => 'object',
+            'properties' => [
+                'answer' => ['type' => 'string'],
+                'note' => ['type' => 'string', 'description' => 'Include only when useful'],
+            ],
+            'required' => ['answer'],
+            'additionalProperties' => false,
+        ];
+        $config = schemaConfig(['name' => 'optional_answer', 'schema' => $schema, 'strict' => false]);
+        $transport = new FixtureTransport();
+        directModel(['supported_parameters' => ['structured_outputs']], $config, $transport)
+            ->generateTextResult(prompt());
+        $wire = json_decode($transport->requests[0]->getBody(), true, 512, JSON_THROW_ON_ERROR);
+        expectSame(['name' => 'optional_answer', 'schema' => $schema, 'strict' => false],
+            $wire['response_format']['json_schema'], 'Optional note remains outside required and strict false remains false');
+        expectSame(true, $wire['provider']['require_parameters'], 'Endpoint guard on optional schema');
+    },
     'schema merges provider preferences without weakening endpoint guard' => static function (): void {
         $config = schemaConfig();
         $config->setCustomOptions(['provider' => ['order' => ['FixtureEndpoint'], 'allow_fallbacks' => false, 'sort' => 'price']]);
@@ -478,6 +521,40 @@ $tests['typed tools cannot be replaced by raw custom tools'] = static function (
     $config->setCustomOptions(['tools' => [['type' => 'function', 'function' => declaration()->toArray()]]]);
     rejectBeforeTransport(['supported_parameters' => ['tools']], $config, 'tools');
 };
+$tests['raw tools require supported metadata and a list of function objects'] = static function (): void {
+    foreach ([
+        ['lookup' => ['type' => 'function', 'function' => declaration()->toArray()]],
+        'not-a-list',
+        [null],
+        [['type' => 'web_search', 'function' => declaration()->toArray()]],
+        [['type' => 'function', 'function' => 'lookup']],
+        [['type' => 'function']],
+    ] as $tools) {
+        $config = new ModelConfig();
+        $config->setCustomOptions(['tools' => $tools]);
+        rejectBeforeTransport(['supported_parameters' => ['tools']], $config, 'tools');
+    }
+    $config = new ModelConfig();
+    $config->setCustomOptions(['tools' => [['type' => 'function', 'function' => declaration()->toArray()]]]);
+    rejectBeforeTransport(['supported_parameters' => ['tool_choice']], $config, 'tools');
+};
+$tests['legacy metadata without JSON MIME option rejects raw JSON mode before transport'] = static function (): void {
+    $original = metadata(['supported_parameters' => ['response_format']]);
+    $options = array_values(array_filter($original->getSupportedOptions(), static function ($option): bool {
+        return !$option->getName()->isOutputMimeType();
+    }));
+    $legacy = new ModelMetadata($original->getId(), $original->getName(),
+        $original->getSupportedCapabilities(), $options);
+    $config = new ModelConfig();
+    $config->setCustomOptions(['response_format' => ['type' => 'json_object']]);
+    $transport = new FixtureTransport();
+    $model = new OpenRouterTextGenerationModel($legacy, OpenRouterProvider::metadata());
+    $model->setConfig($config);
+    $model->setHttpTransporter($transport);
+    $model->setRequestAuthentication(new ApiKeyRequestAuthentication('offline-fixture-not-a-key'));
+    expectThrows(static function () use ($model): void { $model->generateTextResult(prompt()); }, 'response_format');
+    expectSame([], $transport->requests, 'Legacy metadata cannot silently enable JSON mode');
+};
 $tests['schema provider list or null rejected before transport'] = static function (): void {
     foreach ([null, ['not-an-object']] as $value) {
         $config = schemaConfig();
@@ -499,12 +576,40 @@ $tests['empty object schema remains JSON object in the encoded request'] = stati
 };
 $tests['unsupported architectures excluded and explicit directional arrays take precedence'] = static function (): void {
     $directory = new MetadataDirectoryForTest();
-    foreach ([['modality' => 'image->text'], ['modality' => 'audio->audio'], ['modality' => 'nonsense'], ['input_modalities' => 'text', 'output_modalities' => ['text']], ['input_modalities' => ['text'], 'output_modalities' => [false, null]], 'malformed'] as $architecture) {
+    foreach ([['modality' => 'image->text'], ['modality' => 'audio->audio'], ['modality' => 'nonsense'],
+        ['modality' => false], ['input_modalities' => 'text', 'output_modalities' => ['text']],
+        ['input_modalities' => ['text'], 'output_modalities' => [false, null]], 'malformed'] as $architecture) {
         expectSame(null, $directory->parseOptionalFixture(['id' => 'fixture/unsupported', 'architecture' => $architecture]), 'Unsupported model excluded');
     }
     $model = metadata(['architecture' => ['modality' => 'text+image->image', 'input_modalities' => ['text'], 'output_modalities' => ['text']]]);
     expectSame(true, isSelected($model, new ModelConfig()), 'Explicit arrays preferred');
     $image = [new Message(MessageRoleEnum::user(), [new MessagePart('image'), new MessagePart(new File('https://fixtures.invalid/image.png', 'image/png'))])];
     expectSame(false, ModelRequirements::fromPromptData(CapabilityEnum::textGeneration(), $image, new ModelConfig())->areMetBy($model), 'Input not inferred from output/legacy');
+};
+$tests['malformed model discovery response fails with a controlled data error'] = static function (): void {
+    $transport = new MalformedModelsTransport();
+    $directory = new OpenRouterModelMetadataDirectory();
+    $directory->setHttpTransporter($transport);
+    $directory->setRequestAuthentication(new ApiKeyRequestAuthentication('offline-fixture-not-a-key'));
+    try {
+        $directory->listModelMetadata();
+    } catch (ResponseException $error) {
+        expectSame(true, strpos($error->getMessage(), 'data') !== false, 'Missing data named in error');
+        expectSame(OpenRouterProvider::url('/models'), $transport->requests[0]->getUri(), 'Actual discovery route');
+        expectSame('GET', $transport->requests[0]->getMethod()->value, 'Discovery method');
+        return;
+    }
+    throw new RuntimeException('Malformed model discovery succeeded');
+};
+$tests['model discovery skips invalid identifiers and retains a valid unnamed model'] = static function (): void {
+    $transport = new MixedModelsTransport();
+    $directory = new OpenRouterModelMetadataDirectory();
+    $directory->setHttpTransporter($transport);
+    $directory->setRequestAuthentication(new ApiKeyRequestAuthentication('offline-fixture-not-a-key'));
+    $models = $directory->listModelMetadata();
+    expectSame(1, count($models), 'Only valid model listed');
+    expectSame('fixture/discovered', $models[0]->getId(), 'Valid identifier retained');
+    expectSame('fixture/discovered', $models[0]->getName(), 'Absent display name falls back to identifier');
+    expectSame(1, count($transport->requests), 'Single discovery request');
 };
 runTests($tests);

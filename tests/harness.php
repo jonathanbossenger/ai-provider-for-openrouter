@@ -67,6 +67,11 @@ class ProviderForTest extends OpenRouterProvider
     {
         return static::createProviderMetadata();
     }
+
+    public static function modelForMetadata(ModelMetadata $metadata)
+    {
+        return static::createModel($metadata, static::createProviderMetadata());
+    }
 }
 
 function metadata(array $extra = []): ModelMetadata
