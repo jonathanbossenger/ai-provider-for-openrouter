@@ -5,7 +5,7 @@
  * Description: AI Provider for OpenRouter for the WordPress AI Client.
  * Requires at least: 6.9
  * Requires PHP: 7.4
- * Version: 1.0.0
+ * Version: 1.1.0
  * Author: Jonathan Bossenger
  * Author URI: https://jonathanbossenger.com/
  * License: GPL-2.0-or-later

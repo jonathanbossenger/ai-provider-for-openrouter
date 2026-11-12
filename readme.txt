@@ -1,9 +1,9 @@
 === AI Provider for OpenRouter ===
-Contributors: psykro, bradvin
+Contributors: psykro, bradvin, epeicher
 Tags: ai, openrouter, artificial-intelligence, connector
 Requires at least: 6.9
 Tested up to: 7.0
-Stable tag: 1.0.0
+Stable tag: 1.1.0
 Requires PHP: 7.4
 License: GPL-2.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -60,6 +60,16 @@ No, this plugin requires the PHP AI Client plugin to be installed and activated.
 The source code for this plugin is available on GitHub at https://github.com/jonathanbossenger/ai-provider-for-openrouter. You can also report issues and contribute to the plugin there.
 
 == Changelog ==
+
+= 1.1.0 =
+
+* Added image generation and editing with compatible image-output models via Chat Completions
+* Added support for reference-image prompts; unsupported image options are rejected before the request is sent
+* Added tool calling (function declarations) for compatible text models
+* Added structured JSON output via JSON schema for compatible text models
+* Added image input support for compatible multimodal text models
+* Improved model metadata so each model only advertises the options and modalities it supports
+* Added an External services section and source code FAQ to the readme
 
 = 1.0.0 =
 
