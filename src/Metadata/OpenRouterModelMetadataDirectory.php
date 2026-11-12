@@ -181,30 +181,41 @@ class OpenRouterModelMetadataDirectory extends AbstractApiBasedModelMetadataDire
 
         $modality = $model['architecture']['modality'] ?? 'text->text';
         [$inputModality, $outputModality] = $this->splitModality($modality);
-        $inputModalities = [];
-        $outputModalities = [];
+        $inputHasText = str_contains($inputModality, 'text');
+        $inputHasImage = str_contains($inputModality, 'image');
+        $outputHasText = str_contains($outputModality, 'text');
+        $outputHasImage = str_contains($outputModality, 'image');
 
-        if (str_contains($inputModality, 'text')) {
-            $inputModalities[] = ModalityEnum::text();
+        if (!$inputHasText && !$inputHasImage) {
+            $inputHasText = true;
         }
-        if (str_contains($inputModality, 'image')) {
-            $inputModalities[] = ModalityEnum::image();
-        }
-        if (str_contains($outputModality, 'text')) {
-            $outputModalities[] = ModalityEnum::text();
-        }
-        if (str_contains($outputModality, 'image')) {
-            $outputModalities[] = ModalityEnum::image();
-        }
-        if (empty($inputModalities)) {
-            $inputModalities[] = ModalityEnum::text();
-        }
-        if (empty($outputModalities)) {
-            $outputModalities[] = ModalityEnum::text();
+        if (!$outputHasText && !$outputHasImage) {
+            $outputHasText = true;
         }
 
-        $options[] = new SupportedOption(OptionEnum::inputModalities(), [$inputModalities]);
-        $options[] = new SupportedOption(OptionEnum::outputModalities(), [$outputModalities]);
+        $inputModalityOptions = [];
+        if ($inputHasText && $inputHasImage) {
+            $inputModalityOptions[] = [ModalityEnum::text()];
+            $inputModalityOptions[] = [ModalityEnum::text(), ModalityEnum::image()];
+        } elseif ($inputHasImage) {
+            $inputModalityOptions[] = [ModalityEnum::image()];
+        } else {
+            $inputModalityOptions[] = [ModalityEnum::text()];
+        }
+
+        $outputModalityOptions = [];
+        if ($outputHasText && $outputHasImage) {
+            $outputModalityOptions[] = [ModalityEnum::text()];
+            $outputModalityOptions[] = [ModalityEnum::image()];
+            $outputModalityOptions[] = [ModalityEnum::text(), ModalityEnum::image()];
+        } elseif ($outputHasImage) {
+            $outputModalityOptions[] = [ModalityEnum::image()];
+        } else {
+            $outputModalityOptions[] = [ModalityEnum::text()];
+        }
+
+        $options[] = new SupportedOption(OptionEnum::inputModalities(), $inputModalityOptions);
+        $options[] = new SupportedOption(OptionEnum::outputModalities(), $outputModalityOptions);
 
         if (str_contains($outputModality, 'image')) {
             $options[] = new SupportedOption(OptionEnum::candidateCount());

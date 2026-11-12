@@ -26,6 +26,9 @@ use WordPress\AiClient\Results\Enums\FinishReasonEnum;
  * This class extends the text generation model and additionally implements
  * image generation support.
  *
+ * The image request/response helpers below are adapted from
+ * AbstractOpenAiCompatibleImageGenerationModel in php-ai-client.
+ *
  * @since 1.0.0
  */
 class OpenRouterImageGenerationModel extends OpenRouterTextGenerationModel implements ImageGenerationModelInterface
@@ -143,9 +146,23 @@ class OpenRouterImageGenerationModel extends OpenRouterTextGenerationModel imple
         $usage = isset($responseData['usage']) && is_array($responseData['usage'])
             ? $responseData['usage']
             : [];
+        $inputTokens = 0;
+        if (isset($usage['prompt_tokens']) && is_int($usage['prompt_tokens'])) {
+            $inputTokens = $usage['prompt_tokens'];
+        } elseif (isset($usage['input_tokens']) && is_int($usage['input_tokens'])) {
+            $inputTokens = $usage['input_tokens'];
+        }
+
+        $outputTokens = 0;
+        if (isset($usage['completion_tokens']) && is_int($usage['completion_tokens'])) {
+            $outputTokens = $usage['completion_tokens'];
+        } elseif (isset($usage['output_tokens']) && is_int($usage['output_tokens'])) {
+            $outputTokens = $usage['output_tokens'];
+        }
+
         $tokenUsage = new TokenUsage(
-            isset($usage['input_tokens']) && is_int($usage['input_tokens']) ? $usage['input_tokens'] : 0,
-            isset($usage['output_tokens']) && is_int($usage['output_tokens']) ? $usage['output_tokens'] : 0,
+            $inputTokens,
+            $outputTokens,
             isset($usage['total_tokens']) && is_int($usage['total_tokens']) ? $usage['total_tokens'] : 0
         );
 
@@ -174,10 +191,14 @@ class OpenRouterImageGenerationModel extends OpenRouterTextGenerationModel imple
      */
     protected function parseResponseCandidate(array $candidateData, int $index): Candidate
     {
+        $mediaType = isset($candidateData['media_type']) && is_string($candidateData['media_type']) && $candidateData['media_type'] !== ''
+            ? $candidateData['media_type']
+            : 'image/png';
+
         if (isset($candidateData['b64_json']) && is_string($candidateData['b64_json'])) {
-            $image = new File($candidateData['b64_json'], 'image/png');
+            $image = new File($candidateData['b64_json'], $mediaType);
         } elseif (isset($candidateData['url']) && is_string($candidateData['url'])) {
-            $image = new File($candidateData['url'], 'image/png');
+            $image = new File($candidateData['url'], $mediaType);
         } else {
             throw ResponseException::fromInvalidData(
                 $this->providerMetadata()->getName(),
