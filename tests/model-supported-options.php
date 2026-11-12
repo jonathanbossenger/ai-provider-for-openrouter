@@ -10,9 +10,13 @@ namespace WordPress\OpenRouterAiProvider\Tests;
 
 use ReflectionProperty;
 use WordPress\AiClient\AiClient;
+use WordPress\AiClient\Messages\Enums\ModalityEnum;
 use WordPress\AiClient\Providers\ApiBasedImplementation\AbstractApiBasedModelMetadataDirectory;
 use WordPress\AiClient\Providers\Models\DTO\ModelConfig;
 use WordPress\AiClient\Providers\Models\DTO\ModelMetadata;
+use WordPress\AiClient\Providers\Models\DTO\SupportedOption;
+use WordPress\AiClient\Providers\Models\Enums\CapabilityEnum;
+use WordPress\AiClient\Providers\Models\Enums\OptionEnum;
 
 require __DIR__ . '/harness.php';
 
@@ -29,6 +33,16 @@ class CacheRevisionDirectoryForTest extends MetadataDirectoryForTest
     public function cacheNamespace(): string
     {
         return $this->getBaseCacheKey();
+    }
+
+    public function putCachedValue(string $key, $value): void
+    {
+        $this->setCache($key, $value);
+    }
+
+    public function cachedValue(string $key, $default = null)
+    {
+        return $this->getCache($key, $default);
     }
 }
 
@@ -62,6 +76,55 @@ $tests = [
         expectSame('fresh/model', $models[0]->getId(), 'Fresh model metadata returned');
         $directory->listModelMetadata();
         expectSame(1, $directory->fetchCount, 'New schema key caches the fetched map');
+    },
+    'cache miss honors default and malformed cached model row leaves valid model selectable' => static function (): void {
+        $directory = new CacheRevisionDirectoryForTest();
+        expectSame('fallback', $directory->cachedValue('models', 'fallback'), 'Cache miss default');
+        $valid = unserialize(serialize($directory->parseFixture([
+            'id' => 'fixture/cached', 'architecture' => ['modality' => 'text+image->text+image'],
+        ])));
+        $directory->putCachedValue('models', ['broken' => 'not model metadata', 'valid' => $valid]);
+        $rows = $directory->cachedValue('models');
+        expectSame('not model metadata', $rows['broken'], 'Malformed cache row cannot break restoration');
+        expectSame(true, isSelected($rows['valid'], new ModelConfig()), 'Healthy cached row remains selectable');
+    },
+    'legacy cached modality sets preserve malformed entries and restore a selectable valid set' => static function (): void {
+        $directory = new CacheRevisionDirectoryForTest();
+        $original = $directory->parseFixture(['id' => 'fixture/legacy-cache']);
+        $options = [];
+        foreach ($original->getSupportedOptions() as $option) {
+            $options[] = $option->getName()->isInputModalities()
+                ? new SupportedOption(OptionEnum::inputModalities(), [
+                    'malformed-set', [ModalityEnum::text()], ['unrecognized-modality'],
+                ])
+                : $option;
+        }
+        $legacy = new ModelMetadata($original->getId(), $original->getName(),
+            $original->getSupportedCapabilities(), $options);
+        $directory->putCachedValue('models', ['fixture/legacy-cache' => unserialize(serialize($legacy))]);
+        $restored = $directory->cachedValue('models')['fixture/legacy-cache'];
+        foreach ($restored->getSupportedOptions() as $option) {
+            if ($option->getName()->isInputModalities()) {
+                $values = $option->getSupportedValues();
+                expectSame('malformed-set', $values[0], 'Malformed set left intact for caller to reject');
+                expectSame(true, $values[1][0] === ModalityEnum::text(), 'Valid enum restored to SDK singleton');
+                expectSame(['unrecognized-modality'], $values[2], 'Unknown nested value not coerced');
+            }
+        }
+        expectSame(true, isSelected($restored, new ModelConfig()), 'Valid text set remains selectable');
+    },
+    'provider rejects a metadata row with no implemented generation capability' => static function (): void {
+        foreach ([[], [CapabilityEnum::chatHistory()]] as $capabilities) {
+            $row = new ModelMetadata('fixture/no-generation', 'No generation', $capabilities, []);
+            try {
+                ProviderForTest::modelForMetadata($row);
+            } catch (\WordPress\AiClient\Common\Exception\RuntimeException $error) {
+                expectSame(true, strpos($error->getMessage(), 'Unsupported model capabilities:') === 0,
+                    'No arbitrary model is instantiated');
+                continue;
+            }
+            throw new \RuntimeException('Expected unsupported capabilities error');
+        }
     },
     'topK is rejected even when the API lists top_k' => static function (): void {
         $metadata = metadata(['supported_parameters' => ['top_k']]);

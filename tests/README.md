@@ -19,7 +19,7 @@ Composer warns that the copied lock hash differs from the reduced manifest; the 
 are deliberately retained. No dependency update is performed. The bootstrap refuses an existing
 directory, runs no external commands, and never deletes anything. Keep the printed path for replay.
 
-The supported-options runner (15 cases) evolves PR #3 head
+The supported-options runner (18 cases) evolves PR #3 head
 1386a995a8892dcf688e7047601d87ced9808562, authored by @foo-bender. Parameter intent originated with @bradvin at 0e0d2797e9281260aa2a3fc7acc88e1c368dfd09;
 baseline fix at 6caee1b3e05a013197809ae5468cb5c719f0e1a8 and topK fix at the
 head above. Only those tests and specific option/helper additions are reused,
@@ -71,8 +71,8 @@ They prove no typed topK is selectable when the SDK omits top_k, preserving othe
 
 ## Image contract gate
 
-The runner also executes 166 image contracts (230 tests total: 15 options, 49 text,
-166 image). Real SDK registry/PromptBuilder `generateImageResult()` performs normal
+The runner also executes 169 image contracts (241 provider contracts: 18 options, 54 text,
+169 image; plus 3 plugin bootstrap and 8 live-guard contracts, 252 default tests total). Real SDK registry/PromptBuilder `generateImageResult()` performs normal
 image-only requirement selection and interface dispatch. Synthetic dual-output,
 image-only, text-only and malformed metadata fixtures and a strict mock transport
 exercise requests and results. No generated/input URL or local path is retrieved.
@@ -143,3 +143,138 @@ raster MIME/base64 validation does not replace pixel decoding in a consumer.
 Metadata uses a parser-revision cache suffix so an update does not reuse records
 from the previous capability parser. Serialized enum values are compared by their
 predicates/values, rather than relying on singleton object identity.
+
+## WordPress integration tests
+
+The portable integration runners live under `tests/integration/`. Run them against
+an explicitly disposable WordPress installation with this checkout activated as
+the OpenRouter provider. The runner verifies the provider's loaded source path so
+it cannot silently test a different installed copy. Keep dependency installs,
+logs, coverage data, generated images and credential files outside the checkout.
+
+The offline WordPress matrix uses synthetic HTTP responses and requires no API
+key. Run both ordinary and serialize/unserialize cache modes; these exercise real
+plugin registration, Core's `wp_ai_client_prompt()` builders, selection, transport
+adapter and result parsing. They include text and image generation, reference
+input/history/system preservation, tools and tool-result round trips, JSON/schema,
+strict flags, rejected options/media, image-only fixtures and usage placeholders.
+
+```sh
+php tests/integration/offline.php --wordpress "$DISPOSABLE_WP" --cache normal
+php tests/integration/offline.php --wordpress "$DISPOSABLE_WP" --cache serialized
+```
+
+These integration fixtures are not recorded provider responses. They prove local
+contracts; only an explicitly authorized live run can establish actual inference.
+
+## Optional coverage measurement
+
+Xdebug coverage is optional and does not change the dependency pin. Use a PHP
+runtime and matching Xdebug library built for that runtime. Coverage artifacts
+must go to a new external directory. Ordinary test runs do not require Xdebug.
+
+```sh
+"$COVERAGE_PHP" -d xdebug.mode=coverage -d zend_extension="$XDEBUG_LIBRARY" \
+    tests/coverage.php "$DEPS/vendor/autoload.php" "$COVERAGE_OUTPUT" "$XDEBUG_LIBRARY"
+```
+
+Coverage reports identify first-party executable lines and Xdebug branch blocks.
+A branch-block percentage is not proof of every possible execution path or every
+behavior of the SDK, WordPress, models, or downstream consumers. Keep uncovered
+paths and the tested runtime versions visible in acceptance evidence.
+
+## Opt-in live text and image acceptance
+
+Inspect the exact live matrix without loading WordPress or a key:
+
+```sh
+php tests/integration/live.php --list
+php tests/integration/live.php --self-test
+php tests/integration/guard-contracts.php
+```
+
+The matrix contains 17 named cases and at most 18 generation requests (the tool
+round trip uses two). Combined schema cases serialize the function declarations
+but set `tool_choice: none` to require a final JSON answer; the separate tool-cycle
+case validates an actual function call and its response turn. Plain text checks
+validate nonempty UTF-8 and exact raw-to-parsed content preservation rather than
+model-specific greeting capitalization or punctuation. It covers plain text, system/history, sampling, JSON,
+explicit strict schema, optional-field schema with explicit false, combined
+system/tools/schema, vision input, deterministic tool execution and response,
+ordinary text on a dual-capability model, image generation, reference editing,
+landscape/portrait aspect ratio, and text/image selection from serialized caches.
+Models are pinned to `openai/gpt-4.1-mini` and `google/gemini-2.5-flash-image`.
+Catalog availability/support and successful inference remain different evidence.
+
+Before spending anything, replay every live builder against synthetic WordPress
+HTTP responses. This validates outgoing payloads and assertions with no key or
+outbound inference:
+
+```sh
+php tests/integration/dry-run.php --wordpress "$DISPOSABLE_WP"
+```
+
+For an authorized live run, create a private credential file outside the checkout
+(mode 0600, containing only the test key). Use a new existing external directory
+for the ledger, sanitized JSON records and generated PNGs:
+
+```sh
+php tests/integration/live.php \
+    --wordpress "$DISPOSABLE_WP" --key-file "$TEST_KEY_FILE" \
+    --evidence "$LIVE_EVIDENCE" --max-requests 20 --budget-usd 3 \
+    --allow-paid --case all
+```
+
+Without `--allow-paid` and explicit limits the runner refuses to start. The ledger
+persists a reservation before each generation request, locks against concurrent
+runs, rejects corrupt state and model/endpoint changes, and prevents attempted
+cases from being retried. Actual reported costs replace reservations; absent
+costs retain their conservative reservation and remain labelled unknown. The
+hard local policy limits are 20 requests and US$3; those controls are monitored
+request guards, not a claim of a provider-enforced per-run spending cap. Text
+outputs are bounded at 128 tokens, including text on the dual-capability model.
+Unsupported image output limits are not silently sent or invented. Prefer an
+OpenRouter test key with its own credit limit as an additional account control.
+
+Use `--case NAME` for a separately authorized distinct case. Reusing the same
+ledger preserves its original caps and skips attempted cases; deleting a ledger
+does not authorize more spending. There are no automatic retries, schema
+rewrites, JSON-mode downgrades, arbitrary tool actions or generated URL downloads.
+The only executable tool is a deterministic echo with validated arguments.
+
+Live schema outputs are validated against the complete small requested schemas.
+Generated rasters are fully decoded with GD and checked for declared MIME,
+dimensions, nonempty bytes, raw-result identity/order and usage mapping. Saved
+PNG previews may be re-encoded; the recorded SHA-256 identifies original response
+bytes. The runner requires GD. It omits credentials, headers, private prompts,
+account IDs and image base64 from evidence. Raw upstream errors are allowlisted
+and sanitized.
+
+## Coverage map and limits
+
+| Gate | Cases and purpose |
+|---|---|
+| `model-supported-options.php` | 18 metadata, cache, discovery, dispatch and option contracts |
+| `text-contracts.php` | 54 text, tools/round trip, JSON/schema, true/false/unset strict, vision and rejection contracts |
+| `image-contracts.php` | 169 image selection, input/history/configuration, result/MIME/order/usage/finish and malformed-response contracts |
+| `plugin-no-wordpress.php`, `plugin-bootstrap.php` | 3 absent-WordPress, absent/late-SDK and repeated-registration contracts |
+| `integration/guard-contracts.php` | 8 keyless opt-in/model/endpoint/count/cost/ledger/locking guards; included in the default runner |
+| `integration/offline.php` | 36 WordPress text/image cases per cache mode (normal and serialize/unserialize) |
+| `integration/dry-run.php` | All 17 live case builders and assertions with synthetic transport; zero inference |
+| `integration/live.php` | Explicitly authorized authenticated text and image matrix, separate from fixtures |
+
+As measured on PHP 7.4.30/Xdebug 3.1.0, the default tests exercise 470/474
+first-party executable lines, 547/552 Xdebug branch blocks, and 665/790 recorded
+control-flow edges. Plugin entrypoint, autoloader, provider, metadata and text
+executable lines are all covered. Four remaining image lines defend malformed
+cached set shapes or File/requirements states normally rejected by the SDK
+before reaching them; they are reported as uncovered rather than hidden.
+
+No finite matrix proves every combination or model/provider behavior. Live
+image-only models, arbitrary remote result URLs, absent usage and malformed
+provider responses may be unavailable to trigger live; applicable cases remain
+explicitly synthetic tests. The dedicated Image API, streaming, SVG rendering,
+actual OpenStation application behavior and downstream billing consumers are
+outside this implemented test matrix. Source-scoped lint/static passes do not
+resolve the known root Composer/default PHPCS configuration debt or establish
+that deployment/GitHub-mutating workflows ran successfully.
